@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="Application de suivi de musculation">
+    
+    <title>Mes séances</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Musculation">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    
+    <div id="seances-list-view" class="view active">
+        
+        <header class="main-header">
+            <h1 class="main-title">Mes séances</h1>
+            <button id="add-seance-header-btn" class="header-add-btn">+</button>
+        </header>
+
+        <div class="seances-grid" id="seances-grid">
+            </div>
+
+        <div id="empty-seances" class="empty-message hidden">
+            <p>Aucune séance créée</p>
+            <p class="empty-subtitle">Appuyez sur + pour créer votre première séance</p>
+        </div>
+        
+    </div>
+
+    <div id="seance-detail-view" class="view">
+        
+        <header class="detail-header">
+            <button id="back-to-list" class="back-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <h2 id="seance-title" class="detail-title">Séance</h2>
+            <button id="start-timer-btn" class="timer-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </button>
+            <button class="options-btn">⋮</button>
+        </header>
+
+        <div class="exercise-carousel">
+            <div id="exercise-carousel-items" class="carousel-items">
+                </div>
+            <button id="add-exercise-carousel-btn" class="carousel-add-btn">+</button>
+        </div>
+
+        <div class="exercise-detail">
+            
+            <div class="comment-section">
+                <div class="section-header-inline">
+                    <label class="section-label-inline">COMMENTAIRE</label>
+                    </div>
+                <textarea id="exercise-comment-detail" class="comment-textarea" placeholder="Notez vos sensations, réglages machine..."></textarea>
+            </div>
+
+            <div class="session-section">
+                <div class="section-header-with-badge">
+                    <label class="section-label-inline">SÉANCE DU JOUR</label>
+                    </div>
+
+                <div class="series-table-container">
+                    <table class="series-table-modern">
+                        <thead>
+                            <tr>
+                                <th>☐</th>
+                                <th>série</th>
+                                <th>reps</th>
+                                <th>kg</th>
+                                <th>repos</th>
+                                <th>RIR</th>
+                                <th>fait</th>
+                            </tr>
+                        </thead>
+                        <tbody id="series-tbody-detail">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn-action btn-delete-series">Supprimer</button>
+                    <button id="add-series-detail-btn" class="btn-action btn-add-series">Ajouter une série</button>
+                </div>
+            </div>
+
+            <div class="history-section">
+                <label class="section-label-inline">HISTORIQUE RÉCENT</label>
+                <div id="history-timeline" class="history-timeline">
+                    </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="historique-view" class="view">
+        
+        <header class="main-header">
+            <h1 class="main-title">Suivi</h1>
+        </header>
+
+        <div class="content-container">
+            
+            <div class="stats-section">
+                <div class="stat-card-modern">
+                    <span class="stat-value-modern" id="total-sessions">0</span>
+                    <span class="stat-label-modern">Séances totales</span>
+                </div>
+            </div>
+
+            <div class="calendar-section">
+                <h3 class="section-title-small">Calendrier</h3>
+                <div class="calendar-header">
+                    <button id="prev-month" class="calendar-nav-btn">‹</button>
+                    <span id="current-month" class="calendar-month-label"></span>
+                    <button id="next-month" class="calendar-nav-btn">›</button>
+                </div>
+                <div id="calendar" class="calendar-modern"></div>
+            </div>
+
+            <div class="performance-section">
+                <h3 class="section-title-small">Progression</h3>
+                
+                <div class="chart-controls">
+                    <select id="chart-exercise-select" class="chart-select">
+                        <option value="" disabled selected>Choisir un exercice...</option>
+                        </select>
+                    
+                    <div class="chart-toggles">
+                        <button class="chart-toggle active" data-metric="weight">Poids Max</button>
+                        <button class="chart-toggle" data-metric="volume">Volume (Tonnage)</button>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div id="performance-chart" class="performance-chart">
+                        <div class="empty-chart-msg">Sélectionnez un exercice pour voir votre progression</div>
+                    </div>
+                </div>
+                
+                <div id="chart-stats-summary" class="chart-stats-summary hidden">
+                    <div class="mini-stat">
+                        <span class="mini-stat-label">Meilleure Perf</span>
+                        <span class="mini-stat-value" id="stat-max-val">-</span>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-stat-label">Dernière Perf</span>
+                        <span class="mini-stat-value" id="stat-last-val">-</span>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-stat-label">Progression</span>
+                        <span class="mini-stat-value" id="stat-progression">-</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn-modern active" data-view="seances-list">
+            <svg class="nav-icon-modern" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            <span class="nav-label-modern">Séances</span>
+        </button>
+        <button class="nav-btn-modern" data-view="calendar">
+            <svg class="nav-icon-modern" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 6l-9.5 9.5-5-5L1 18"/>
+                <path d="M17 6h6v6"/>
+            </svg>
+            <span class="nav-label-modern">Historique</span>
+        </button>
+    </nav>
+
+    <div id="seance-modal" class="modal-overlay">
+        <div class="modal-modern">
+            <h3 class="modal-title">Nouvelle séance</h3>
+            <input type="text" id="new-seance-name" class="input-modern" placeholder="Nom de la séance" maxlength="50">
+            <div class="modal-actions-modern">
+                <button id="cancel-seance-btn" class="btn-modal-secondary">Annuler</button>
+                <button id="save-seance-btn" class="btn-modal-primary">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="exercise-modal" class="modal-overlay">
+        <div class="modal-modern">
+            <h3 class="modal-title">Nouvel exercice</h3>
+            <input type="text" id="new-exercise-name" class="input-modern" placeholder="Nom de l'exercice" maxlength="50">
+            <input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe musculaire (ex: Pectoraux)" maxlength="30">
+            <div class="modal-actions-modern">
+                <button id="cancel-exercise-btn" class="btn-modal-secondary">Annuler</button>
+                <button id="save-exercise-btn" class="btn-modal-primary">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="storage.js"></script>
+    <script src="app.js"></script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .then(reg => console.log('Service Worker enregistré'))
+                .catch(err => console.log('Erreur Service Worker:', err));
+        }
+    </script>
+    
+</body>
+</html>
