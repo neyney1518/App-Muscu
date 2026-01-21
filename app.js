@@ -682,11 +682,35 @@ function createHistoryItemDetail(entry) {
 
 // ========== MENU OPTIONS ==========
 
+// ========== MENU OPTIONS (Modifié avec déplacement) ==========
+
 function showOptionsMenu() {
+    // On vérifie si on peut bouger l'exercice (s'il n'est pas tout seul)
+    const seance = Storage.getSeance(App.currentSeanceId);
+    const exercises = seance.exercises;
+    const currentIndex = exercises.findIndex(e => e.id === App.currentExerciseId);
+    
+    // On désactive les boutons si on est au bord
+    const canMoveLeft = currentIndex > 0;
+    const canMoveRight = currentIndex < exercises.length - 1;
+
     const menu = document.createElement('div');
     menu.className = 'options-menu';
     menu.innerHTML = `
         <div class="options-menu-content">
+            <div class="menu-header" style="padding: 0 16px 10px; color: #666; font-size: 13px; text-align: center;">OPTIONS EXERCICE</div>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="option-item option-move-left" style="justify-content: center; ${!canMoveLeft ? 'opacity: 0.5; pointer-events: none;' : ''}">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Gauche
+                </button>
+                <button class="option-item option-move-right" style="justify-content: center; ${!canMoveRight ? 'opacity: 0.5; pointer-events: none;' : ''}">
+                    Droite
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+            </div>
+
             <button class="option-item option-delete-exercise">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
@@ -709,13 +733,61 @@ function showOptionsMenu() {
     setTimeout(() => menu.classList.add('active'), 10);
     
     menu.addEventListener('click', (e) => {
-        if (e.target.closest('.option-delete-exercise')) {
+        if (e.target.closest('.option-move-left')) {
+            moveExercise(-1);
+            closeOptionsMenu(menu);
+        } else if (e.target.closest('.option-move-right')) {
+            moveExercise(1);
+            closeOptionsMenu(menu);
+        } else if (e.target.closest('.option-delete-exercise')) {
             deleteCurrentExercise();
+            closeOptionsMenu(menu);
         } else if (e.target.closest('.option-delete-seance')) {
             deleteCurrentSeance();
+            closeOptionsMenu(menu);
+        } else if (e.target.closest('.option-cancel')) {
+            closeOptionsMenu(menu);
         }
-        closeOptionsMenu(menu);
     });
+}
+
+function closeOptionsMenu(menu) {
+    menu.classList.remove('active');
+    setTimeout(() => menu.remove(), 300);
+}
+
+// NOUVELLE FONCTION : Déplacer l'exercice
+function moveExercise(direction) {
+    const seance = Storage.getSeance(App.currentSeanceId);
+    const exercises = [...seance.exercises]; // Copie pour manipuler
+    const currentIndex = exercises.findIndex(e => e.id === App.currentExerciseId);
+    
+    if (currentIndex === -1) return;
+
+    // Calcul du nouvel index
+    const newIndex = currentIndex + direction;
+
+    // Vérification des limites (même si géré visuellement, sécurité en plus)
+    if (newIndex < 0 || newIndex >= exercises.length) return;
+
+    // Échange (Swap)
+    const temp = exercises[newIndex];
+    exercises[newIndex] = exercises[currentIndex];
+    exercises[currentIndex] = temp;
+
+    // Sauvegarde et mise à jour
+    Storage.reorderExercises(App.currentSeanceId, exercises);
+    renderExerciseCarousel({ ...seance, exercises: exercises });
+    
+    // On garde la sélection sur l'exercice déplacé (facultatif mais plus sympa)
+    // selectExerciseInDetail(App.currentExerciseId); // Déjà géré car l'ID ne change pas
+    
+    // Petit feedback visuel
+    const container = document.getElementById('exercise-carousel-items');
+    const newItem = container.children[newIndex];
+    if (newItem) {
+        newItem.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+    }
 }
 
 function closeOptionsMenu(menu) {
@@ -1001,3 +1073,4 @@ function showNotification(message, type = 'info') {
         setTimeout(() => notification.remove(), 300);
     }, 3000);
 }
+
