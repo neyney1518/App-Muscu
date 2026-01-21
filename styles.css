@@ -11,6 +11,8 @@ body {
     color: #ffffff;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    /* Pour éviter le "pull-to-refresh" qui gêne l'app */
+    overscroll-behavior-y: none; 
 }
 
 /* Layout */
@@ -68,6 +70,7 @@ body {
     padding: 0 20px 20px 20px;
 }
 
+/* CARTE SÉANCE (Modifiée pour le bouton suppression) */
 .seance-card {
     background: linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%);
     border-radius: 16px;
@@ -78,10 +81,39 @@ body {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     border: 1px solid #333;
+    position: relative; /* Pour le bouton delete absolu */
 }
 
 .seance-card:active {
     transform: scale(0.98);
+}
+
+.seance-content-wrapper {
+    flex: 1; /* Prend tout l'espace disponible */
+    display: flex;
+    flex-direction: column;
+}
+
+/* NOUVEAU : Bouton suppression sur la carte */
+.card-delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: #555;
+    padding: 8px;
+    cursor: pointer;
+    z-index: 10;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-delete-btn:hover, .card-delete-btn:active {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
 }
 
 .seance-icon {
@@ -231,6 +263,15 @@ body {
     align-items: center;
     gap: 8px;
     cursor: pointer;
+    position: relative;
+    /* Empêcher la sélection de texte pendant le drag */
+    user-select: none; 
+}
+
+/* NOUVEAU : Effet visuel Drag & Drop */
+.carousel-item.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
 }
 
 .carousel-icon {
@@ -259,14 +300,20 @@ body {
     height: 36px;
 }
 
+/* NOUVEAU : Meilleure gestion des titres longs */
 .carousel-label {
-    font-size: 12px;
+    font-size: 11px;
     color: #888;
     text-align: center;
     max-width: 80px;
+    /* Autoriser 2 lignes */
+    line-height: 1.2;
+    height: 28px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
 }
 
 .carousel-item.active .carousel-label {
@@ -446,6 +493,39 @@ body {
 
 .btn-action:active {
     transform: scale(0.98);
+}
+
+/* NOUVEAU : Zone bouton Fin de séance */
+.finish-session-container {
+    padding: 10px 20px 30px 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.finish-btn {
+    width: 100%;
+    padding: 16px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #fff;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.finish-btn:active {
+    transform: scale(0.98);
+}
+
+/* État "Terminé" (vert) pour le bouton */
+.finish-btn.completed-state {
+    border-color: #22c55e;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
 }
 
 /* Historique timeline */
@@ -684,6 +764,17 @@ body {
 .chart-svg {
     width: 100%;
     height: 100%;
+}
+
+/* NOUVEAU : Interaction graphique */
+.chart-svg circle {
+    transition: r 0.2s, fill 0.2s;
+}
+
+.chart-svg circle:hover {
+    r: 5;
+    fill: #ef4444;
+    cursor: pointer;
 }
 
 .empty-chart-msg {
