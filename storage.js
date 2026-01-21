@@ -8,7 +8,9 @@ const Storage = {
         SESSIONS: 'musculation_sessions'
     },
 
-    // Récupérer toutes les séances (modèles)
+    // --- GESTION DES MODÈLES DE SÉANCES ---
+
+    // Récupérer toutes les séances
     getSeances() {
         const data = localStorage.getItem(this.KEYS.SEANCES);
         return data ? JSON.parse(data) : [];
@@ -30,10 +32,6 @@ const Storage = {
         };
         seances.push(newSeance);
         this.saveSeances(seances);
-        
-        // Créer une session pour cette nouvelle séance (jour de création)
-        this.addSession(newSeance.id, new Date().toISOString().split('T')[0]);
-        
         return newSeance;
     },
 
@@ -43,14 +41,24 @@ const Storage = {
         return seances.find(s => s.id === seanceId);
     },
 
-    // Supprimer une séance
+    // Mettre à jour une séance (générique)
+    updateSeance(seanceId, updates) {
+        const seances = this.getSeances();
+        const index = seances.findIndex(s => s.id === seanceId);
+        if (index !== -1) {
+            seances[index] = { ...seances[index], ...updates };
+            this.saveSeances(seances);
+        }
+    },
+
+    // Supprimer une séance (et ses exercices associés du modèle)
     deleteSeance(seanceId) {
         let seances = this.getSeances();
         seances = seances.filter(s => s.id !== seanceId);
         this.saveSeances(seances);
-        // Note: On garde les sessions (historique) même si le modèle est supprimé, ou on pourrait nettoyer.
-        // Pour l'instant on laisse pour l'intégrité des données passées.
     },
+
+    // --- GESTION DES EXERCICES DANS LES SÉANCES ---
 
     // Ajouter un exercice à une séance
     addExercise(seanceId, name, muscleGroup = '') {
@@ -79,7 +87,17 @@ const Storage = {
         }
     },
 
-    // Récupérer une liste plate de tous les exercices uniques (par nom ou ID)
+    // NOUVEAU : Réorganiser les exercices (Drag & Drop)
+    reorderExercises(seanceId, newExercisesOrder) {
+        const seances = this.getSeances();
+        const seance = seances.find(s => s.id === seanceId);
+        if (seance) {
+            seance.exercises = newExercisesOrder;
+            this.saveSeances(seances);
+        }
+    },
+
+    // Récupérer une liste plate de tous les exercices (pour les stats)
     getAllExercisesFlat() {
         const seances = this.getSeances();
         const all = [];
@@ -88,7 +106,6 @@ const Storage = {
         seances.forEach(seance => {
             if (seance.exercises) {
                 seance.exercises.forEach(ex => {
-                    // On évite les doublons parfaits (Nom + Groupe)
                     const key = ex.name.toLowerCase() + '|' + (ex.muscleGroup || '');
                     if (!seenNames.has(key)) {
                         seenNames.add(key);
@@ -100,7 +117,9 @@ const Storage = {
         return all;
     },
 
-    // Récupérer toutes les sessions (exécutions des séances)
+    // --- GESTION DES SESSIONS (SÉANCES EFFECTUÉES) ---
+
+    // Récupérer toutes les sessions
     getSessions() {
         const data = localStorage.getItem(this.KEYS.SESSIONS);
         return data ? JSON.parse(data) : [];
@@ -123,7 +142,8 @@ const Storage = {
                 id: Date.now().toString(),
                 seanceId: seanceId,
                 date: date,
-                exercises: {}
+                exercises: {},
+                completed: false // NOUVEAU : Par défaut une séance n'est pas terminée
             };
             sessions.push(session);
             this.saveSessions(sessions);
@@ -132,11 +152,32 @@ const Storage = {
         return session;
     },
 
-    // Récupérer la session du jour pour une séance
+    // Récupérer la session du jour (crée un brouillon si n'existe pas)
     getTodaySession(seanceId) {
         const today = new Date().toISOString().split('T')[0];
         return this.addSession(seanceId, today);
     },
+
+    // NOUVEAU : Valider une session (Fin de séance)
+    completeSession(sessionId) {
+        const sessions = this.getSessions();
+        const session = sessions.find(s => s.id === sessionId);
+        
+        if (session) {
+            // On ne met à jour la date que si c'est la première validation
+            if (session.completed !== true) {
+                const now = new Date();
+                session.completed = true;
+                session.completedAt = now.toISOString();
+                session.date = now.toISOString().split('T')[0]; // La date devient celle de la validation
+            }
+            this.saveSessions(sessions);
+            return session;
+        }
+        return null;
+    },
+
+    // --- GESTION DES DONNÉES D'EXERCICE (SÉRIES) ---
 
     // Sauvegarder les données d'un exercice pour une session
     saveExerciseData(sessionId, exerciseId, data) {
@@ -167,34 +208,38 @@ const Storage = {
         };
     },
 
-    // Récupérer l'historique d'un exercice dans le contexte d'une SÉANCE spécifique
+    // --- HISTORIQUE ET STATISTIQUES ---
+
+    // Récupérer l'historique d'un exercice (dans le contexte d'une séance précise)
     getExerciseHistory(seanceId, exerciseId) {
         const sessions = this.getSessions();
         const today = new Date().toISOString().split('T')[0];
         
+        // Filtrer les sessions :
+        // 1. De cette séance
+        // 2. Pas celle d'aujourd'hui (en cours)
+        // 3. Qui sont TERMINÉES (completed === true) OU ANCIENNES (completed === undefined)
+        // 4. Qui ont des données pour cet exercice
         const history = sessions
             .filter(s => s.seanceId === seanceId && s.date !== today)
+            .filter(s => s.completed === true || s.completed === undefined) // Rétrocompatibilité
             .filter(s => s.exercises && s.exercises[exerciseId] && s.exercises[exerciseId].series && s.exercises[exerciseId].series.length > 0)
             .map(s => ({
                 date: s.date,
                 data: s.exercises[exerciseId]
             }))
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
+            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Plus récent d'abord
         
         return history;
     },
 
-    // Récupérer l'historique GLOBAL d'un exercice (toutes séances confondues) pour les stats
+    // Récupérer l'historique GLOBAL d'un exercice (toutes séances confondues) pour les graphiques
     getGlobalExerciseHistory(exerciseId) {
         const sessions = this.getSessions();
+        const history = [];
         
-        // On cherche l'exercice par ID dans n'importe quelle session
-        // Note: Cela suppose que l'ID de l'exercice est unique et constant.
-        // Si l'utilisateur crée "Bench Press" dans Séance A et "Bench Press" dans Séance B, ils ont des IDs différents.
-        // Pour ce cas simple, on va filtrer par ID. Une amélioration future serait de filtrer par NOM d'exercice.
-        
-        // Récupérons d'abord le nom de l'exercice pour chercher par nom (plus robuste pour les stats)
-        // 1. Trouver l'exercice dans les modèles
+        // On récupère le nom de l'exercice ciblé pour le retrouver partout
+        // (Car l'ID peut être unique par séance, mais on veut grouper par "Mouvement")
         const seances = this.getSeances();
         let targetName = null;
         for (const s of seances) {
@@ -205,48 +250,45 @@ const Storage = {
             }
         }
         
-        // Si on ne trouve pas par ID (ex supprimé), on renvoie vide
+        // Si l'exercice a été supprimé des modèles, on ne peut pas faire le lien par nom, on renvoie vide
         if (!targetName) return [];
 
-        // 2. Chercher dans toutes les sessions les exercices qui ont ce nom (approximativement) ou cet ID
-        const history = [];
-        
         sessions.forEach(session => {
+            // Ignorer les sessions brouillons non terminées (sauf si anciennes sans flag)
+            if (session.completed === false) return;
+
             if (!session.exercises) return;
             
-            // On regarde toutes les clés d'exos de cette session
+            // Chercher l'exercice dans cette session
             Object.keys(session.exercises).forEach(exKey => {
-                const exData = session.exercises[exKey];
-                
-                // Si c'est le bon ID
+                // Si c'est le même ID (cas simple)
                 if (exKey === exerciseId) {
-                    history.push({ date: session.date, data: exData });
-                    return;
+                    history.push({ date: session.date, data: session.exercises[exKey] });
                 }
-                
-                // Sinon, est-ce que c'est le même nom ? (Il faudrait stocker le nom dans la session pour être sûr, 
-                // mais ici le modèle de données ne stocke que les IDs dans 'sessions'.
-                // Pour l'instant, on se base strictement sur l'ID de l'exercice créé dans la séance.
-                // Si l'utilisateur a créé deux fois "Bench" dans deux séances différentes, ce sont deux entités différentes.)
+                // (Optionnel : Ici on pourrait ajouter une logique pour chercher par "Nom" si tu as le même exo dans plusieurs séances)
             });
         });
         
         return history.filter(h => h.data.series && h.data.series.length > 0);
     },
 
-    // Récupérer toutes les dates avec des sessions
+    // Récupérer toutes les dates avec des sessions TERMINÉES
     getSessionDates() {
         const sessions = this.getSessions();
-        return sessions.map(s => s.date);
+        return sessions
+            .filter(s => s.completed === true || s.completed === undefined)
+            .map(s => s.date);
     },
 
-    // Compter le nombre total de sessions
+    // Compter le nombre total de sessions TERMINÉES
     getTotalSessionsCount() {
-        return this.getSessions().length;
+        return this.getSessions()
+            .filter(s => s.completed === true || s.completed === undefined)
+            .length;
     }
 };
 
-// Export pour utilisation dans app.js
+// Export pour utilisation
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Storage;
 }
