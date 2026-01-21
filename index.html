@@ -59,26 +59,26 @@
             <button id="add-exercise-carousel-btn" class="carousel-add-btn">+</button>
         </div>
 
-        <div class="exercise-detail">
+        <div id="exercise-detail-content" class="exercise-detail">
             
             <div class="comment-section">
                 <div class="section-header-inline">
                     <label class="section-label-inline">COMMENTAIRE</label>
-                    </div>
+                </div>
                 <textarea id="exercise-comment-detail" class="comment-textarea" placeholder="Notez vos sensations, réglages machine..."></textarea>
             </div>
 
             <div class="session-section">
                 <div class="section-header-with-badge">
-                    <label class="section-label-inline">SÉANCE DU JOUR</label>
-                    </div>
+                    <label class="section-label-inline">SÉRIE EN COURS</label>
+                </div>
 
                 <div class="series-table-container">
                     <table class="series-table-modern">
                         <thead>
                             <tr>
                                 <th>☐</th>
-                                <th>série</th>
+                                <th>#</th>
                                 <th>reps</th>
                                 <th>kg</th>
                                 <th>repos</th>
@@ -104,6 +104,11 @@
             </div>
 
         </div>
+
+        <div class="finish-session-container">
+            <button id="finish-session-btn" class="finish-btn">Terminer la séance</button>
+        </div>
+
     </div>
 
     <div id="historique-view" class="view">
@@ -117,7 +122,7 @@
             <div class="stats-section">
                 <div class="stat-card-modern">
                     <span class="stat-value-modern" id="total-sessions">0</span>
-                    <span class="stat-label-modern">Séances totales</span>
+                    <span class="stat-label-modern">Séances terminées</span>
                 </div>
             </div>
 
@@ -141,27 +146,26 @@
                     
                     <div class="chart-toggles">
                         <button class="chart-toggle active" data-metric="weight">Poids Max</button>
-                        <button class="chart-toggle" data-metric="volume">Volume (Tonnage)</button>
+                        <button class="chart-toggle" data-metric="volume">Volume</button>
                     </div>
                 </div>
 
                 <div class="chart-container">
                     <div id="performance-chart" class="performance-chart">
-                        <div class="empty-chart-msg">Sélectionnez un exercice pour voir votre progression</div>
-                    </div>
+                        </div>
                 </div>
                 
                 <div id="chart-stats-summary" class="chart-stats-summary hidden">
                     <div class="mini-stat">
-                        <span class="mini-stat-label">Meilleure Perf</span>
+                        <span class="mini-stat-label">Max</span>
                         <span class="mini-stat-value" id="stat-max-val">-</span>
                     </div>
                     <div class="mini-stat">
-                        <span class="mini-stat-label">Dernière Perf</span>
+                        <span class="mini-stat-label">Dernier</span>
                         <span class="mini-stat-value" id="stat-last-val">-</span>
                     </div>
                     <div class="mini-stat">
-                        <span class="mini-stat-label">Progression</span>
+                        <span class="mini-stat-label">Prog.</span>
                         <span class="mini-stat-value" id="stat-progression">-</span>
                     </div>
                 </div>
@@ -192,7 +196,7 @@
     <div id="seance-modal" class="modal-overlay">
         <div class="modal-modern">
             <h3 class="modal-title">Nouvelle séance</h3>
-            <input type="text" id="new-seance-name" class="input-modern" placeholder="Nom de la séance" maxlength="50">
+            <input type="text" id="new-seance-name" class="input-modern" placeholder="Nom (ex: Push)" maxlength="50">
             <div class="modal-actions-modern">
                 <button id="cancel-seance-btn" class="btn-modal-secondary">Annuler</button>
                 <button id="save-seance-btn" class="btn-modal-primary">Créer</button>
@@ -203,8 +207,8 @@
     <div id="exercise-modal" class="modal-overlay">
         <div class="modal-modern">
             <h3 class="modal-title">Nouvel exercice</h3>
-            <input type="text" id="new-exercise-name" class="input-modern" placeholder="Nom de l'exercice" maxlength="50">
-            <input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe musculaire (ex: Pectoraux)" maxlength="30">
+            <input type="text" id="new-exercise-name" class="input-modern" placeholder="Nom (ex: Dips)" maxlength="50">
+            <input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe (ex: Pectoraux)" maxlength="30">
             <div class="modal-actions-modern">
                 <button id="cancel-exercise-btn" class="btn-modal-secondary">Annuler</button>
                 <button id="save-exercise-btn" class="btn-modal-primary">Créer</button>
