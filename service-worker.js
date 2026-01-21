@@ -1,6 +1,7 @@
 // Service Worker pour fonctionnement offline
+// VERSION 2 (Mise à jour)
 
-const CACHE_NAME = 'musculation-v1';
+const CACHE_NAME = 'musculation-v2'; // Changement V1 -> V2 pour forcer la mise à jour
 const urlsToCache = [
   '/',
   '/index.html',
@@ -12,10 +13,13 @@ const urlsToCache = [
 
 // Installation du Service Worker
 self.addEventListener('install', event => {
+  // Force l'activation immédiate du nouveau SW sans attendre la fermeture des onglets
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Cache ouvert');
+        console.log('Nouveau cache v2 ouvert');
         return cache.addAll(urlsToCache);
       })
   );
@@ -35,6 +39,8 @@ self.addEventListener('activate', event => {
       );
     })
   );
+  // Prend le contrôle des pages immédiatement
+  self.clients.claim();
 });
 
 // Interception des requêtes
@@ -42,25 +48,17 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Retourner depuis le cache si disponible
         if (response) {
           return response;
         }
-        
-        // Sinon, faire la requête réseau
         return fetch(event.request).then(response => {
-          // Ne pas mettre en cache les requêtes non-GET
           if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
           }
-          
-          // Cloner la réponse
           const responseToCache = response.clone();
-          
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
-          
           return response;
         });
       })
