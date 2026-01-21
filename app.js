@@ -1,6 +1,7 @@
-// Application de musculation - Logique principale modernisée et améliorée
+// Application de musculation - Logique principale
+// Version Finale avec Fin de Séance, Drag&Drop, Graphiques & Rétrocompatibilité
 
-// État global
+// État global de l'application
 const App = {
     currentSeanceId: null,
     currentExerciseId: null,
@@ -13,16 +14,16 @@ const App = {
     statsState: {
         selectedExerciseId: null,
         metric: 'weight' // 'weight' ou 'volume'
+    },
+    // État pour le Drag & Drop
+    dragState: {
+        dragSrcEl: null
     }
 };
 
-// Icônes de groupes musculaires (SVG inline)
+// Icône par défaut
 const MUSCLE_ICONS = {
-    default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>`,
-    legs: `<svg width="36" height="36" viewBox="0 0 100 100" fill="#ef4444"><path d="M30,20 L35,20 L37,60 L40,90 L35,90 L32,60 Z M65,20 L70,20 L68,60 L65,90 L60,90 L63,60 Z M35,20 Q50,15 65,20"/></svg>`,
-    arms: `<svg width="36" height="36" viewBox="0 0 100 100" fill="#ef4444"><path d="M50,30 Q45,35 40,45 L35,60 M50,30 Q55,35 60,45 L65,60 M50,25 L50,35"/></svg>`,
-    chest: `<svg width="36" height="36" viewBox="0 0 100 100" fill="#ef4444"><path d="M30,30 Q50,40 70,30 L70,60 Q50,55 30,60 Z"/></svg>`,
-    back: `<svg width="36" height="36" viewBox="0 0 100 100" fill="#ef4444"><path d="M50,20 L40,35 L35,55 L40,70 L50,75 L60,70 L65,55 L60,35 Z"/></svg>`
+    default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>`
 };
 
 // ========== INITIALISATION ==========
@@ -32,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSeancesListView();
     initSeanceDetailView();
     initHistoriqueView();
-    initPerformanceView(); // Nouvelle init
+    initPerformanceView();
     renderSeancesList();
 });
 
@@ -67,6 +68,8 @@ function switchToView(viewId) {
         
         if (viewId === 'historique-view') {
             refreshHistoriqueView();
+        } else if (viewId === 'seances-list-view') {
+            renderSeancesList();
         }
     }
 }
@@ -113,20 +116,45 @@ function createSeanceCard(seance) {
     const icon = MUSCLE_ICONS.default;
     const exercisesCount = seance.exercises ? seance.exercises.length : 0;
     
+    // Structure HTML modifiée pour inclure le bouton de suppression
     card.innerHTML = `
-        <div class="seance-icon">${icon}</div>
-        <div class="seance-name">${seance.name}</div>
-        <div class="seance-exercises-count">${exercisesCount} exercice${exercisesCount > 1 ? 's' : ''}</div>
+        <div class="seance-content-wrapper">
+            <div class="seance-icon">${icon}</div>
+            <div class="seance-name">${seance.name}</div>
+            <div class="seance-exercises-count">${exercisesCount} exercice${exercisesCount > 1 ? 's' : ''}</div>
+        </div>
+        <button class="card-delete-btn" title="Supprimer la séance">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        </button>
     `;
     
-    card.addEventListener('click', () => openSeanceDetail(seance.id));
+    // Clic sur la partie principale -> Ouvrir
+    card.querySelector('.seance-content-wrapper').addEventListener('click', () => openSeanceDetail(seance.id));
+    
+    // Clic sur poubelle -> Supprimer
+    card.querySelector('.card-delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation(); // Empêcher l'ouverture de la séance
+        deleteSeanceFromHome(seance.id);
+    });
     
     return card;
+}
+
+function deleteSeanceFromHome(seanceId) {
+    if (confirm('Voulez-vous vraiment supprimer cette séance et ses exercices ? L\'historique sera conservé.')) {
+        Storage.deleteSeance(seanceId);
+        renderSeancesList();
+        showNotification('Séance supprimée', 'success');
+    }
 }
 
 function openSeanceDetail(seanceId) {
     App.currentSeanceId = seanceId;
     const seance = Storage.getSeance(seanceId);
+    
+    // Création ou récupération de la session du jour (brouillon tant que pas validée)
     const session = Storage.getTodaySession(seanceId);
     App.currentSessionId = session.id;
     
@@ -134,8 +162,15 @@ function openSeanceDetail(seanceId) {
     
     renderExerciseCarousel(seance);
     
+    // Mise à jour de l'état du bouton "Fin de séance"
+    updateFinishButtonState(session);
+    
+    // Sélectionner le premier exercice s'il y en a
     if (seance.exercises && seance.exercises.length > 0) {
         selectExerciseInDetail(seance.exercises[0].id);
+    } else {
+        // Masquer le contenu détail si pas d'exercice
+        document.getElementById('exercise-detail-content').classList.add('hidden');
     }
     
     switchToView('seance-detail-view');
@@ -155,14 +190,14 @@ function saveNewSeance() {
     const name = document.getElementById('new-seance-name').value.trim();
     
     if (!name) {
-        showNotification('Veuillez entrer un nom pour la séance', 'error');
+        showNotification('Veuillez entrer un nom', 'error');
         return;
     }
     
     Storage.addSeance(name);
     closeSeanceModal();
     renderSeancesList();
-    showNotification('Séance créée avec succès', 'success');
+    showNotification('Séance créée', 'success');
 }
 
 // ========== VUE DÉTAIL SÉANCE ==========
@@ -171,7 +206,8 @@ function initSeanceDetailView() {
     document.getElementById('back-to-list').addEventListener('click', () => {
         stopTimer();
         switchToView('seances-list-view');
-        updateNavigation('seances-list');
+        // Rafraîchir la liste au retour pour voir les changements potentiels
+        renderSeancesList();
     });
     
     document.getElementById('add-exercise-carousel-btn').addEventListener('click', openExerciseModal);
@@ -191,25 +227,60 @@ function initSeanceDetailView() {
     // Minuteur
     document.getElementById('start-timer-btn').addEventListener('click', toggleTimer);
     
-    // Commentaire avec sauvegarde auto
+    // Commentaire
     document.getElementById('exercise-comment-detail').addEventListener('input', saveExerciseCommentDetail);
-    
-    // NOTE: Bouton "Voir la fiche" supprimé
     
     // Menu options
     document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
+
+    // NOUVEAU : Bouton Fin de séance
+    document.getElementById('finish-session-btn').addEventListener('click', finishCurrentSession);
 }
 
-function updateNavigation(viewName) {
-    const navButtons = document.querySelectorAll('.nav-btn-modern');
-    navButtons.forEach(btn => {
-        if (btn.dataset.view === viewName) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
+// --- LOGIQUE FIN DE SÉANCE ---
+
+function updateFinishButtonState(session) {
+    const btn = document.getElementById('finish-session-btn');
+    
+    if (session.completed) {
+        // Si déjà terminée aujourd'hui
+        btn.textContent = "Séance terminée (Mettre à jour)";
+        btn.classList.add('completed-state');
+    } else {
+        // Si pas encore terminée
+        btn.textContent = "Terminer la séance";
+        btn.classList.remove('completed-state');
+    }
 }
+
+function finishCurrentSession() {
+    if (!App.currentSessionId) return;
+    
+    // Appel à Storage pour valider
+    const session = Storage.completeSession(App.currentSessionId);
+    
+    if (session) {
+        showNotification('Séance validée et enregistrée !', 'success');
+        
+        // Effet visuel immédiat
+        const btn = document.getElementById('finish-session-btn');
+        btn.innerHTML = '✔ Validé';
+        btn.style.background = '#22c55e';
+        btn.style.borderColor = '#22c55e';
+        
+        // Retour à la liste après un court délai
+        setTimeout(() => {
+            stopTimer();
+            switchToView('seances-list-view');
+            // Reset du bouton pour la prochaine fois
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.textContent = 'Terminer la séance';
+        }, 800);
+    }
+}
+
+// --- LOGIQUE CARROUSEL & DRAG'N'DROP ---
 
 function renderExerciseCarousel(seance) {
     const container = document.getElementById('exercise-carousel-items');
@@ -217,16 +288,20 @@ function renderExerciseCarousel(seance) {
     
     if (!seance.exercises || seance.exercises.length === 0) return;
     
-    seance.exercises.forEach(exercise => {
-        const item = createCarouselItem(exercise);
+    seance.exercises.forEach((exercise, index) => {
+        const item = createCarouselItem(exercise, index);
         container.appendChild(item);
     });
 }
 
-function createCarouselItem(exercise) {
+function createCarouselItem(exercise, index) {
     const item = document.createElement('div');
     item.className = 'carousel-item';
     item.dataset.exerciseId = exercise.id;
+    item.dataset.index = index; // Important pour le tri
+    
+    // Attributs pour le Drag & Drop
+    item.draggable = true;
     
     const icon = MUSCLE_ICONS.default;
     
@@ -237,13 +312,76 @@ function createCarouselItem(exercise) {
         <div class="carousel-label">${exercise.name}</div>
     `;
     
+    // Clic simple pour sélectionner
     item.addEventListener('click', () => selectExerciseInDetail(exercise.id));
+    
+    // Ajout des événements Drag & Drop
+    addDragEvents(item);
     
     return item;
 }
 
+function addDragEvents(item) {
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('drop', handleDrop);
+    // Note: Pour le mobile pur, le drag'n'drop natif HTML5 commence à être bien supporté.
+    // Si besoin d'une librairie tactile spécifique, on pourrait l'ajouter plus tard,
+    // mais restons sur du Vanilla JS léger.
+}
+
+function handleDragStart(e) {
+    App.dragState.dragSrcEl = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault(); // Nécessaire pour permettre le drop
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    const dragEndEl = this;
+    const dragSrcEl = App.dragState.dragSrcEl;
+    
+    if (dragSrcEl !== dragEndEl) {
+        // 1. Récupérer les index
+        const oldIndex = parseInt(dragSrcEl.dataset.index);
+        const newIndex = parseInt(dragEndEl.dataset.index);
+        
+        // 2. Mettre à jour les données
+        const seance = Storage.getSeance(App.currentSeanceId);
+        const exercises = [...seance.exercises];
+        
+        // Déplacer l'élément dans le tableau
+        const [movedItem] = exercises.splice(oldIndex, 1);
+        exercises.splice(newIndex, 0, movedItem);
+        
+        // 3. Sauvegarder
+        Storage.reorderExercises(App.currentSeanceId, exercises);
+        
+        // 4. Rafraîchir l'affichage
+        renderExerciseCarousel({ ...seance, exercises });
+    }
+    
+    dragSrcEl.classList.remove('dragging');
+    return false;
+}
+
 function selectExerciseInDetail(exerciseId) {
     App.currentExerciseId = exerciseId;
+    
+    // Afficher le conteneur s'il était caché
+    document.getElementById('exercise-detail-content').classList.remove('hidden');
     
     const items = document.querySelectorAll('.carousel-item');
     items.forEach(item => {
@@ -290,7 +428,7 @@ function saveNewExercise() {
     const muscle = document.getElementById('new-exercise-muscle').value.trim();
     
     if (!name) {
-        showNotification('Veuillez entrer un nom pour l\'exercice', 'error');
+        showNotification('Veuillez entrer un nom', 'error');
         return;
     }
     
@@ -300,10 +438,10 @@ function saveNewExercise() {
     const seance = Storage.getSeance(App.currentSeanceId);
     renderExerciseCarousel(seance);
     selectExerciseInDetail(exercise.id);
-    showNotification('Exercice ajouté avec succès', 'success');
+    showNotification('Exercice ajouté', 'success');
 }
 
-// ========== GESTION DES SÉRIES ==========
+// ========== GESTION DES SÉRIES (AMÉLIORÉE) ==========
 
 function renderSeriesTableDetail(series) {
     const tbody = document.getElementById('series-tbody-detail');
@@ -314,12 +452,20 @@ function renderSeriesTableDetail(series) {
     }
     
     series.forEach((s, index) => {
-        const row = createSeriesRowDetail(index + 1, s);
+        // --- LOGIQUE RÉTROCOMPATIBILITÉ REPOS ---
+        // Si < 10, c'était probablement des minutes -> afficher en secondes
+        // Si >= 10, c'est déjà des secondes
+        let displayRepos = s.repos || '';
+        if (s.repos && s.repos < 10) {
+            displayRepos = s.repos * 60; 
+        }
+
+        const row = createSeriesRowDetail(index + 1, s, displayRepos);
         tbody.appendChild(row);
     });
 }
 
-function createSeriesRowDetail(num, data = {}) {
+function createSeriesRowDetail(num, data = {}, displayRepos) {
     const tr = document.createElement('tr');
     
     tr.innerHTML = `
@@ -327,8 +473,8 @@ function createSeriesRowDetail(num, data = {}) {
         <td>${num}</td>
         <td><input type="number" class="series-reps" value="${data.reps || ''}" min="0" placeholder="0"></td>
         <td><input type="number" class="series-kg" value="${data.kg || ''}" min="0" step="0.5" placeholder="0"></td>
-        <td><input type="number" class="series-repos" value="${data.repos || ''}" min="0" placeholder="0"></td>
-        <td><input type="number" class="series-rir" value="${data.rir || ''}" min="0" max="10" placeholder="0"></td>
+        <td><input type="number" class="series-repos" value="${displayRepos !== undefined ? displayRepos : ''}" min="0" placeholder="s"></td>
+        <td><input type="number" class="series-rir" value="${data.rir || ''}" min="0" max="10" placeholder="-"></td>
         <td><input type="checkbox" class="series-fait" ${data.fait ? 'checked' : ''}></td>
     `;
     
@@ -344,7 +490,7 @@ function addSeriesInDetail() {
     const data = Storage.getExerciseData(App.currentSessionId, App.currentExerciseId);
     if (!data.series) data.series = [];
     
-    // Pré-remplissage avec les valeurs de la série précédente
+    // Pré-remplissage intelligent
     let newSerie = {};
     if (data.series.length > 0) {
         const lastSerie = data.series[data.series.length - 1];
@@ -361,7 +507,7 @@ function addSeriesInDetail() {
     renderSeriesTableDetail(data.series);
     saveSeriesDetail();
     
-    // Scroll vers la nouvelle série
+    // Scroll auto
     setTimeout(() => {
         const tbody = document.getElementById('series-tbody-detail');
         const lastRow = tbody.lastElementChild;
@@ -384,11 +530,7 @@ function deleteSelectedSeries() {
     });
     
     if (selectedIndexes.length === 0) {
-        showNotification('Sélectionnez au moins une série à supprimer', 'warning');
-        return;
-    }
-    
-    if (!confirm(`Supprimer ${selectedIndexes.length} série(s) ?`)) {
+        showNotification('Aucune série sélectionnée', 'warning');
         return;
     }
     
@@ -397,7 +539,6 @@ function deleteSelectedSeries() {
     
     Storage.saveExerciseData(App.currentSessionId, App.currentExerciseId, data);
     renderSeriesTableDetail(data.series);
-    showNotification(`${selectedIndexes.length} série(s) supprimée(s)`, 'success');
 }
 
 function saveSeriesDetail() {
@@ -407,6 +548,7 @@ function saveSeriesDetail() {
     rows.forEach(row => {
         const reps = parseInt(row.querySelector('.series-reps').value) || 0;
         const kg = parseFloat(row.querySelector('.series-kg').value) || 0;
+        // On sauvegarde directement la valeur en secondes entrée par l'utilisateur
         const repos = parseInt(row.querySelector('.series-repos').value) || 0;
         const rir = parseInt(row.querySelector('.series-rir').value) || 0;
         const fait = row.querySelector('.series-fait').checked;
@@ -466,7 +608,6 @@ function updateTimerDisplay() {
     const btn = document.getElementById('start-timer-btn');
     btn.setAttribute('title', display);
     
-    // Affichage dans le bouton si actif
     if (App.timerInterval) {
         btn.innerHTML = `<span class="timer-text">${display}</span>`;
     } else {
@@ -480,12 +621,9 @@ function updateTimerDisplay() {
 }
 
 function notifyTimerEnd() {
-    // Vibration si disponible
     if ('vibrate' in navigator) {
         navigator.vibrate([200, 100, 200]);
     }
-    
-    // Notification
     showNotification('Temps de repos terminé !', 'success');
 }
 
@@ -496,7 +634,7 @@ function loadExerciseHistoryDetail() {
     const container = document.getElementById('history-timeline');
     
     if (history.length === 0) {
-        container.innerHTML = '<p class="empty-history">Aucun historique pour cet exercice</p>';
+        container.innerHTML = '<p class="empty-history">Aucun historique validé pour cet exercice</p>';
         return;
     }
     
@@ -515,18 +653,20 @@ function createHistoryItemDetail(entry) {
     const date = new Date(entry.date).toLocaleDateString('fr-FR', {
         weekday: 'long',
         day: 'numeric',
-        month: 'long',
-        year: 'numeric'
+        month: 'short'
     });
     
     let seriesHTML = '';
     entry.data.series.forEach((s, i) => {
+        // Affichage conversion repos minutes -> secondes si besoin
+        let reposAff = s.repos || 0;
+        if (reposAff < 10 && reposAff > 0) reposAff *= 60;
+
         seriesHTML += `
             <div class="history-series-row">
                 <span class="history-series-number">${i + 1}</span>
-                <span class="history-series-value">${s.reps} reps</span>
-                <span class="history-series-value">${s.kg} kg</span>
-                <span class="history-series-value">${s.repos}s</span>
+                <span class="history-series-value">${s.reps} x ${s.kg}kg</span>
+                <span class="history-series-value">${reposAff}s</span>
                 ${s.rir !== undefined ? `<span class="history-series-value">RIR ${s.rir}</span>` : ''}
             </div>
         `;
@@ -594,9 +734,8 @@ function deleteCurrentExercise() {
     if (seance.exercises && seance.exercises.length > 0) {
         selectExerciseInDetail(seance.exercises[0].id);
     } else {
-        // Plus d'exercices
-        document.getElementById('exercise-carousel-items').innerHTML = '';
-        // On pourrait vider les champs ici
+        // S'il n'y a plus d'exercices, on cache le contenu
+        document.getElementById('exercise-detail-content').classList.add('hidden');
     }
     
     showNotification('Exercice supprimé', 'success');
@@ -607,7 +746,6 @@ function deleteCurrentSeance() {
     
     Storage.deleteSeance(App.currentSeanceId);
     switchToView('seances-list-view');
-    updateNavigation('seances-list');
     renderSeancesList();
     showNotification('Séance supprimée', 'success');
 }
@@ -629,14 +767,13 @@ function initHistoriqueView() {
 }
 
 function refreshHistoriqueView() {
+    // Utilisation de la nouvelle fonction qui compte les séances terminées
     const totalSessions = Storage.getTotalSessionsCount();
     document.getElementById('total-sessions').textContent = totalSessions;
     renderCalendar();
     
-    // Rafraîchir les options d'exercices si de nouveaux ont été créés
+    // Stats
     populateExerciseSelect();
-    
-    // Si un exercice est déjà sélectionné, mettre à jour le graph
     if (App.statsState.selectedExerciseId) {
         updatePerformanceChart();
     }
@@ -718,28 +855,22 @@ function initPerformanceView() {
 
 function populateExerciseSelect() {
     const select = document.getElementById('chart-exercise-select');
-    // Sauvegarder la sélection actuelle
     const currentVal = select.value;
     
-    // Vider sauf la première option
     while (select.options.length > 1) {
         select.remove(1);
     }
 
     const allExercises = Storage.getAllExercisesFlat();
-    
-    // Trier par nom
     allExercises.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Grouper par groupe musculaire si besoin, ici liste simple
     allExercises.forEach(ex => {
         const option = document.createElement('option');
-        option.value = ex.id; // On utilise l'ID de l'exercice (attention, si même nom mais ID diff, ça apparaît 2 fois. Pour le MVP c'est OK)
+        option.value = ex.id;
         option.textContent = ex.name + (ex.muscleGroup ? ` (${ex.muscleGroup})` : '');
         select.appendChild(option);
     });
 
-    // Restaurer si possible
     if (currentVal) {
         select.value = currentVal;
     }
@@ -753,31 +884,34 @@ function updatePerformanceChart() {
 
     if (!exerciseId) return;
 
-    // Récupérer les données globales (toutes sessions confondues)
-    // Comme Storage.getExerciseHistory est lié à une seanceId, on doit scanner toutes les sessions
     const history = Storage.getGlobalExerciseHistory(exerciseId);
     
+    // Trier par date croissante
+    history.sort((a, b) => new Date(a.date) - new Date(b.date));
+
     if (history.length < 2) {
         container.innerHTML = '<div class="empty-chart-msg">Pas assez de données pour afficher une progression.</div>';
         summary.classList.add('hidden');
         return;
     }
 
-    // Préparer les données pour le graph
-    // Trier par date croissante pour le graph
-    history.sort((a, b) => new Date(a.date) - new Date(b.date));
-
     const dataPoints = history.map(h => {
         let value = 0;
+        
+        // On ne prend que les séries "valides" (poids et reps > 0)
+        const validSeries = h.data.series.filter(s => s.reps > 0 && (s.kg !== undefined && s.kg >= 0));
+        
         if (metric === 'weight') {
-            // Poids max soulevé ce jour là sur une série valide
-            value = Math.max(...h.data.series.filter(s => s.kg).map(s => parseFloat(s.kg) || 0), 0);
+            // Poids max
+            if (validSeries.length > 0) {
+                value = Math.max(...validSeries.map(s => parseFloat(s.kg) || 0));
+            }
         } else {
-            // Tonnage : somme (reps * kg)
-            value = h.data.series.reduce((acc, s) => acc + ((parseInt(s.reps)||0) * (parseFloat(s.kg)||0)), 0);
+            // Volume (Tonnage)
+            value = validSeries.reduce((acc, s) => acc + ((parseInt(s.reps)||0) * (parseFloat(s.kg)||0)), 0);
         }
         return { date: h.date, value: value };
-    }).filter(p => p.value > 0); // Exclure les sessions vides
+    }).filter(p => p.value > 0);
 
     if (dataPoints.length === 0) {
         container.innerHTML = '<div class="empty-chart-msg">Aucune donnée valide trouvée.</div>';
@@ -785,46 +919,50 @@ function updatePerformanceChart() {
         return;
     }
 
-    // Générer le SVG
     const svg = generateSVGChart(dataPoints);
     container.innerHTML = svg;
     summary.classList.remove('hidden');
 
-    // Mettre à jour les stats textuelles
     updateStatsSummary(dataPoints, metric);
 }
 
 function generateSVGChart(data) {
-    const width = 100; // viewbox units
-    const height = 50; // viewbox units
+    const width = 100;
+    const height = 50;
     const padding = 5;
 
     const values = data.map(d => d.value);
-    const minVal = Math.min(...values) * 0.9; // un peu de marge
+    const minVal = Math.min(...values) * 0.9;
     const maxVal = Math.max(...values) * 1.1;
-    
     const range = maxVal - minVal;
 
-    // Création des points
     let points = "";
     
     data.forEach((d, i) => {
         const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
-        // Inverser Y car SVG coords (0 en haut)
         const y = height - (padding + ((d.value - minVal) / range) * (height - 2 * padding));
         points += `${x},${y} `;
     });
 
-    const strokeColor = '#ef4444';
-    
+    // Génération des points cliquables (cercles)
+    const circles = data.map((d, i) => {
+        const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+        const y = height - (padding + ((d.value - minVal) / range) * (height - 2 * padding));
+        const dateStr = new Date(d.date).toLocaleDateString();
+        
+        // Cercle invisible plus grand pour zone de clic, + cercle visible
+        return `
+            <circle cx="${x}" cy="${y}" r="2.5" fill="transparent" stroke="none">
+                <title>${dateStr} : ${d.value}</title>
+            </circle>
+            <circle cx="${x}" cy="${y}" r="1" fill="#fff" pointer-events="none" />
+        `;
+    }).join('');
+
     return `
         <svg viewBox="0 0 ${width} ${height}" class="chart-svg">
-            <polyline fill="none" stroke="${strokeColor}" stroke-width="2" points="${points}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
-            ${data.map((d, i) => {
-                const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
-                const y = height - (padding + ((d.value - minVal) / range) * (height - 2 * padding));
-                return `<circle cx="${x}" cy="${y}" r="1.5" fill="#fff" />`;
-            }).join('')}
+            <polyline fill="none" stroke="#ef4444" stroke-width="1.5" points="${points}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+            ${circles}
         </svg>
     `;
 }
@@ -833,15 +971,14 @@ function updateStatsSummary(data, metric) {
     const last = data[data.length - 1].value;
     const max = Math.max(...data.map(d => d.value));
     
-    // Calcul progression vs première séance
     const first = data[0].value;
     const prog = ((last - first) / first) * 100;
     const progSign = prog > 0 ? '+' : '';
     
-    const unit = metric === 'weight' ? 'kg' : 'kg'; // Volume est aussi en kg (tonnage)
+    const unit = metric === 'weight' ? 'kg' : 't';
 
-    document.getElementById('stat-max-val').textContent = `${max} ${unit}`;
-    document.getElementById('stat-last-val').textContent = `${last} ${unit}`;
+    document.getElementById('stat-max-val').textContent = `${max}`;
+    document.getElementById('stat-last-val').textContent = `${last}`;
     
     const progEl = document.getElementById('stat-progression');
     progEl.textContent = `${progSign}${prog.toFixed(1)}%`;
