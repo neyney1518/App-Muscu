@@ -1,11 +1,11 @@
 {
-  "name": "Ma Musculation",
-  "short_name": "Musculation",
-  "description": "Application de suivi de musculation personnelle",
+  "name": "Malzou-training",
+  "short_name": "Malzou",
+  "description": "Application de suivi de musculation",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait",
   "icons": [
     {
