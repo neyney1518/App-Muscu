@@ -165,3 +165,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     .series-table-modern th { font-size: 10px; padding: 10px 4px; }
     .series-table-modern input[type="number"] { max-width: 50px; font-size: 13px; }
 }
+
+/* AJOUT CORRECTIF CARROUSEL */
+.carousel-items {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
