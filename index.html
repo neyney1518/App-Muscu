@@ -4,17 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
+    <meta name="description" content="Suivi training">
+    
     <title>Malzou-training</title>
-    <h2>Mes séances</h2>
+    <meta name="apple-mobile-web-app-title" content="Malzou">
+    
     <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
+    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    
     <div id="seances-list-view" class="view active">
         <header class="main-header">
-            <div class="header-title-group"><img src="icon-192.png" alt="Logo" class="header-logo"><h1 class="main-title">Mes séances</h1></div>
+            <div class="header-title-group">
+                <img src="icon-192.png" alt="Logo" class="header-logo">
+                <h1 class="main-title">Malzou-training</h1>
+            </div>
             <div class="header-actions">
                 <button id="settings-btn" class="header-icon-btn">⚙️</button>
                 <button id="add-seance-header-btn" class="header-add-btn">+</button>
@@ -49,57 +60,56 @@
     </div>
 
     <div id="historique-view" class="view">
-        <header class="main-header"><h1 class="main-title">Suivi</h1></header>
+        <header class="main-header"><h1 class="main-title">Analyse</h1></header>
         <div class="content-container">
-            <div class="stats-section"><div class="stat-card-modern"><span class="stat-value-modern" id="total-sessions">0</span><span class="stat-label-modern">Séances terminées</span></div></div>
-            <div class="calendar-section"><h3 class="section-title-small">Calendrier</h3><div class="calendar-header"><button id="prev-month" class="calendar-nav-btn">‹</button><span id="current-month"></span><button id="next-month" class="calendar-nav-btn">›</button></div><div id="calendar" class="calendar-modern"></div></div>
-            <div class="performance-section">
-                <h3 class="section-title-small">Progression</h3>
+            
+            <div class="dashboard-card">
+                <div class="card-header-icon">🔥</div>
+                <span class="stat-value-modern" id="total-sessions">0</span>
+                <span class="stat-label-modern">Séances terminées</span>
+            </div>
+
+            <div class="dashboard-card">
+                <h3 class="card-title">Calendrier</h3>
+                <div class="calendar-header">
+                    <button id="prev-month" class="calendar-nav-btn">‹</button>
+                    <span id="current-month"></span>
+                    <button id="next-month" class="calendar-nav-btn">›</button>
+                </div>
+                <div id="calendar" class="calendar-modern"></div>
+            </div>
+
+            <div class="dashboard-card">
+                <h3 class="card-title">Progression</h3>
                 <div class="chart-controls">
-                    <select id="chart-exercise-select" class="chart-select"></select>
-                    <div class="chart-toggles"><button class="chart-toggle active" data-metric="weight">Poids</button><button class="chart-toggle" data-metric="volume">Volume</button></div>
+                    <select id="chart-exercise-select" class="chart-select"><option value="" disabled selected>Choisir un exercice...</option></select>
+                    <div class="chart-toggles">
+                        <button class="chart-toggle active" data-metric="weight">Poids</button>
+                        <button class="chart-toggle" data-metric="volume">Volume</button>
+                    </div>
                 </div>
                 <div class="chart-container"><div id="performance-chart" class="performance-chart"></div></div>
                 <div id="chart-stats-summary" class="chart-stats-summary hidden">
                     <div class="mini-stat"><span>Max</span><span class="mini-stat-value" id="stat-max-val">-</span></div>
                     <div class="mini-stat"><span>Dernier</span><span class="mini-stat-value" id="stat-last-val">-</span></div>
-                    <div class="mini-stat"><span>Prog.</span><span class="mini-stat-value" id="stat-progression">-</span></div>
+                    <div class="mini-stat"><span>Évol.</span><span class="mini-stat-value" id="stat-progression">-</span></div>
                 </div>
             </div>
+
         </div>
     </div>
 
     <nav class="bottom-nav">
         <button class="nav-btn-modern active" data-view="seances-list"><svg class="nav-icon-modern" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="nav-label-modern">Séances</span></button>
-        <button class="nav-btn-modern" data-view="calendar"><svg class="nav-icon-modern" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg><span class="nav-label-modern">Historique</span></button>
+        <button class="nav-btn-modern" data-view="calendar"><svg class="nav-icon-modern" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg><span class="nav-label-modern">Stats</span></button>
     </nav>
 
     <div id="seance-modal" class="modal-overlay"><div class="modal-modern"><h3 class="modal-title">Nouvelle séance</h3><input type="text" id="new-seance-name" class="input-modern" placeholder="Nom (ex: Push)"><div class="modal-actions-modern"><button id="cancel-seance-btn" class="btn-modal-secondary">Annuler</button><button id="save-seance-btn" class="btn-modal-primary">Créer</button></div></div></div>
-    
-    <div id="exercise-modal" class="modal-overlay">
-        <div class="modal-modern">
-            <h3 class="modal-title">Nouvel exercice</h3>
-            <input type="text" id="new-exercise-name" class="input-modern" placeholder="Nom (ex: Dips)" list="exercises-list">
-            <datalist id="exercises-list"></datalist>
-            <input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe (ex: Pectoraux)">
-            <div class="modal-actions-modern"><button id="cancel-exercise-btn" class="btn-modal-secondary">Annuler</button><button id="save-exercise-btn" class="btn-modal-primary">Créer</button></div>
-        </div>
-    </div>
-
-    <div id="settings-modal" class="modal-overlay">
-        <div class="modal-modern">
-            <h3 class="modal-title">Paramètres</h3>
-            <p style="color:#888;font-size:14px;margin-bottom:20px">Sauvegardez vos données régulièrement.</p>
-            <button id="export-data-btn" class="btn-modal-secondary" style="width:100%;margin-bottom:10px">Sauvegarder (Export)</button>
-            <button id="import-data-btn" class="btn-modal-secondary" style="width:100%;margin-bottom:20px">Restaurer (Import)</button>
-            <input type="file" id="import-file-input" accept=".json" style="display:none">
-            <button id="close-settings-btn" class="btn-modal-primary">Fermer</button>
-        </div>
-    </div>
+    <div id="exercise-modal" class="modal-overlay"><div class="modal-modern"><h3 class="modal-title">Nouvel exercice</h3><input type="text" id="new-exercise-name" class="input-modern" placeholder="Nom (ex: Dips)" list="exercises-list"><datalist id="exercises-list"></datalist><input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe (ex: Pectoraux)"><div class="modal-actions-modern"><button id="cancel-exercise-btn" class="btn-modal-secondary">Annuler</button><button id="save-exercise-btn" class="btn-modal-primary">Créer</button></div></div></div>
+    <div id="settings-modal" class="modal-overlay"><div class="modal-modern"><h3 class="modal-title">Paramètres</h3><p style="color:#888;font-size:14px;margin-bottom:20px">Sauvegardez vos données.</p><button id="export-data-btn" class="btn-modal-secondary" style="width:100%;margin-bottom:10px">Sauvegarder (Export)</button><button id="import-data-btn" class="btn-modal-secondary" style="width:100%;margin-bottom:20px">Restaurer (Import)</button><input type="file" id="import-file-input" accept=".json" style="display:none"><button id="close-settings-btn" class="btn-modal-primary">Fermer</button></div></div>
 
     <script src="storage.js"></script>
     <script src="app.js"></script>
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 </html>
-
