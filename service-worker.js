@@ -1,5 +1,5 @@
-// Service Worker - VERSION 4
-const CACHE_NAME = 'musculation-v4';
+// Service Worker - VERSION 5
+const CACHE_NAME = 'musculation-v5';
 const urlsToCache = ['/', '/index.html', '/styles.css', '/app.js', '/storage.js', '/manifest.json'];
 
 self.addEventListener('install', event => {
