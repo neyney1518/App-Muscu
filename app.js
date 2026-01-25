@@ -1,4 +1,4 @@
-// Application de musculation - Version Premium V1
+// Application de musculation - Version Premium V1 (Corrigée)
 
 const App = {
     currentSeanceId: null,
@@ -282,7 +282,7 @@ function loadExerciseDetailData() {
     const data = Storage.getExerciseData(App.currentSessionId, App.currentExerciseId);
     document.getElementById('exercise-comment-detail').value = data.comment || '';
     renderSeriesTableDetail(data.series || []);
-    loadExerciseHistoryDetail();
+    loadExerciseHistoryDetail(); // C'est ici que ça plantait !
     checkPRVisuals();
 }
 
@@ -488,7 +488,7 @@ function showOptionsMenu() {
                 </button>
             </div>
             <button class="option-item option-delete-exercise"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Supprimer exercice</button>
-            <button class="option-item option-delete-seance"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Supprimer séance</button>
+            <button class="option-item option-delete-seance"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg> Supprimer séance</button>
             <button class="option-item option-cancel">Annuler</button>
         </div>
     `;
@@ -540,7 +540,24 @@ function deleteCurrentSeance() {
     showNotification('Séance supprimée', 'success');
 }
 
-// ========== HISTORIQUE ==========
+// ========== HISTORIQUE DÉTAIL (C'EST LA FONCTION MANQUANTE RAJOUTÉE) ==========
+
+function loadExerciseHistoryDetail() {
+    const history = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
+    const container = document.getElementById('history-timeline');
+    
+    if (history.length === 0) {
+        container.innerHTML = '<p class="empty-history">Aucun historique validé pour cet exercice</p>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    history.forEach(entry => {
+        const item = createHistoryItemDetail(entry);
+        container.appendChild(item);
+    });
+}
 
 function createHistoryItemDetail(entry) {
     const div = document.createElement('div');
@@ -562,6 +579,8 @@ function createHistoryItemDetail(entry) {
     `;
     return div;
 }
+
+// ========== HISTORIQUE VUE ==========
 
 function initHistoriqueView() {
     document.getElementById('prev-month').addEventListener('click', () => { App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth() - 1); renderCalendar(); });
