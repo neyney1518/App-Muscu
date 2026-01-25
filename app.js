@@ -540,12 +540,20 @@ function deleteCurrentSeance() {
     showNotification('Séance supprimée', 'success');
 }
 
-// ========== HISTORIQUE DÉTAIL (C'EST LA FONCTION MANQUANTE RAJOUTÉE) ==========
+
+// ============================================================
+// PARTIE MANQUANTE À COLLER À LA FIN DE APP.JS
+// ============================================================
 
 function loadExerciseHistoryDetail() {
+    // Cette fonction est indispensable pour ouvrir un exercice !
+    if (!App.currentSeanceId || !App.currentExerciseId) return;
+
     const history = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
     const container = document.getElementById('history-timeline');
     
+    if (!container) return; // Sécurité
+
     if (history.length === 0) {
         container.innerHTML = '<p class="empty-history">Aucun historique validé pour cet exercice</p>';
         return;
@@ -562,21 +570,48 @@ function loadExerciseHistoryDetail() {
 function createHistoryItemDetail(entry) {
     const div = document.createElement('div');
     div.className = 'history-date-item';
-    const date = new Date(entry.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' });
-    const totalVolume = entry.data.series.reduce((acc, s) => acc + ((s.reps||0) * (s.kg||0)), 0);
-    const maxWeight = Math.max(...entry.data.series.map(s => parseFloat(s.kg)||0));
     
-    let seriesHTML = '';
-    entry.data.series.forEach((s, i) => {
-        let reposAff = s.repos || 0;
-        if (reposAff < 10 && reposAff > 0) reposAff *= 60;
-        seriesHTML += `<div class="history-series-row"><span class="history-series-number">${i + 1}</span><span class="history-series-value">${s.reps} x ${s.kg}kg</span><span class="history-series-value">${reposAff}s</span></div>`;
+    const date = new Date(entry.date).toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short'
     });
     
+    // Calculs de stats rapides
+    let totalVolume = 0;
+    let maxWeight = 0;
+    
+    if (entry.data.series) {
+        totalVolume = entry.data.series.reduce((acc, s) => acc + ((parseInt(s.reps)||0) * (parseFloat(s.kg)||0)), 0);
+        const weights = entry.data.series.map(s => parseFloat(s.kg)||0);
+        if (weights.length > 0) maxWeight = Math.max(...weights);
+    }
+    
+    let seriesHTML = '';
+    if (entry.data.series) {
+        entry.data.series.forEach((s, i) => {
+            // Conversion repos si < 10
+            let reposAff = s.repos || 0;
+            if (reposAff < 10 && reposAff > 0) reposAff *= 60;
+
+            seriesHTML += `
+                <div class="history-series-row">
+                    <span class="history-series-number">${i + 1}</span>
+                    <span class="history-series-value">${s.reps} x ${s.kg}kg</span>
+                    <span class="history-series-value">${reposAff}s</span>
+                </div>
+            `;
+        });
+    }
+    
     div.innerHTML = `
-        <div class="history-date-label" style="display:flex; justify-content:space-between;"><span>${date}</span><span style="font-size:11px; color:#666;">Vol: ${totalVolume}kg | Max: ${maxWeight}kg</span></div>
+        <div class="history-date-label" style="display:flex; justify-content:space-between;">
+            <span>${date}</span>
+            <span style="font-size:11px; color:#666;">Vol: ${totalVolume}kg | Max: ${maxWeight}kg</span>
+        </div>
         <div class="history-series-grid">${seriesHTML}</div>
     `;
+    
     return div;
 }
 
@@ -713,3 +748,4 @@ function showNotification(msg, type = 'info') {
     setTimeout(() => n.classList.add('show'), 10);
     setTimeout(() => { n.classList.remove('show'); setTimeout(() => n.remove(), 300); }, 3000);
 }
+
