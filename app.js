@@ -1,7 +1,13 @@
 const App = {
     currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
     currentCalendarMonth: new Date(),
+    
+    // Timer Repos
     timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', // stopped, running, paused
+    
+    // Timer Session (Global)
+    sessionTimerInterval: null, sessionStartTime: null, sessionElapsed: 0,
+
     statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
 };
 const MUSCLE_ICONS = { default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>` };
@@ -56,7 +62,7 @@ function openSeanceModal() { document.getElementById('seance-modal').classList.a
 function closeSeanceModal() { document.getElementById('seance-modal').classList.remove('active'); }
 function saveNewSeance() { const n = document.getElementById('new-seance-name').value.trim(); if(n) { Storage.addSeance(n); closeSeanceModal(); renderSeancesList(); } }
 
-// DÉTAIL SÉANCE
+// DÉTAIL SÉANCE & LOGIQUE DOUBLE TIMER
 function openSeanceDetail(id) {
     App.currentSeanceId = id;
     const s = Storage.getSeance(id);
@@ -68,28 +74,44 @@ function openSeanceDetail(id) {
     btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
     btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn";
     
-    // AUTO-START CHRONO (Reset puis Start)
-    resetTimer();
-    startTimer();
+    // --- TIMER 1 : SESSION GLOBALE (Auto-Start à l'ouverture) ---
+    startSessionTimer(); 
     
+    // --- TIMER 2 : REPOS (Remise à zéro) ---
+    resetTimer();
+
     if (s.exercises.length > 0) selectExerciseInDetail(s.exercises[0].id);
     else document.getElementById('exercise-detail-content').classList.add('hidden');
     switchToView('seance-detail-view');
 }
+
 function initSeanceDetailView() {
-    document.getElementById('back-to-list').addEventListener('click', () => { stopTimer(true); switchToView('seances-list-view'); });
+    document.getElementById('back-to-list').addEventListener('click', () => { 
+        stopRestTimer(true); // Stop timer repos
+        stopSessionTimer();  // Stop timer session
+        switchToView('seances-list-view'); 
+    });
+    
     document.getElementById('cancel-exercise-btn').addEventListener('click', () => document.getElementById('exercise-modal').classList.remove('active'));
     document.getElementById('save-exercise-btn').addEventListener('click', saveNewExercise);
     document.getElementById('add-series-detail-btn').addEventListener('click', addSeries);
     document.querySelector('.btn-delete-series').addEventListener('click', deleteSelectedSeries);
     
-    // Gestionnaire de Clic Chrono (Logique Start/Pause/Reset)
-    document.getElementById('start-timer-btn').addEventListener('click', handleTimerClick);
+    // Listener pour le chrono de repos (logique Pause/Reset)
+    document.getElementById('start-timer-btn').addEventListener('click', handleRestTimerClick);
     
+    // Listener pour l'autocomplétion des exercices
+    document.getElementById('new-exercise-name').addEventListener('input', handleInputSuggestions);
+
     document.getElementById('exercise-comment-detail').addEventListener('input', () => saveSeries());
     document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
     document.getElementById('finish-session-btn').addEventListener('click', () => {
-        if(Storage.completeSession(App.currentSessionId)) { showNotification('Validé !', 'success'); switchToView('seances-list-view'); stopTimer(true); }
+        if(Storage.completeSession(App.currentSessionId)) { 
+            showNotification('Validé !', 'success'); 
+            stopRestTimer(true);
+            stopSessionTimer();
+            switchToView('seances-list-view'); 
+        }
     });
 }
 
@@ -140,26 +162,48 @@ function openExerciseModal() {
     document.getElementById('exercise-modal').classList.add('active');
     const input = document.getElementById('new-exercise-name');
     input.value = '';
+    document.getElementById('suggestions-container').innerHTML = ''; // Reset suggestions
     setTimeout(() => input.focus(), 100);
+}
+
+// === NOUVELLE LOGIQUE SUGGESTIONS (Remplacement de Datalist) ===
+function handleInputSuggestions(e) {
+    const val = e.target.value.toLowerCase().trim();
+    const container = document.getElementById('suggestions-container');
+    container.innerHTML = '';
     
-    // Remplissage Datalist (Suggestions)
-    const list = document.getElementById('exercises-list');
-    list.innerHTML = '';
+    if(val.length < 1) {
+        container.classList.add('hidden');
+        return;
+    }
+
     const all = Storage.getAllExercisesFlat();
-    // Trie alphabétique et unicité
     const uniqueNames = [...new Set(all.map(e => e.name))].sort();
-    uniqueNames.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        list.appendChild(opt);
-    });
+    
+    const matches = uniqueNames.filter(n => n.toLowerCase().includes(val));
+    
+    if(matches.length > 0) {
+        container.classList.remove('hidden');
+        matches.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = name;
+            div.onclick = () => {
+                document.getElementById('new-exercise-name').value = name;
+                container.innerHTML = '';
+                container.classList.add('hidden');
+            };
+            container.appendChild(div);
+        });
+    } else {
+        container.classList.add('hidden');
+    }
 }
 
 function saveNewExercise() {
     const name = document.getElementById('new-exercise-name').value.trim();
     const muscle = document.getElementById('new-exercise-muscle').value.trim();
     if(name) { 
-        // La fonction addExercise de storage.js gère la réutilisation d'ID
         const ex = Storage.addExercise(App.currentSeanceId, name, muscle);
         document.getElementById('exercise-modal').classList.remove('active');
         renderExerciseCarousel(Storage.getSeance(App.currentSeanceId));
@@ -178,9 +222,8 @@ function renderSeriesTable(series) {
         tr.querySelectorAll('input:not(.series-select)').forEach(i => i.onchange = () => { saveSeries(); checkPR(); });
         tr.querySelector('.fait').onchange = (e) => { 
             if(e.target.checked) {
-                // Auto-start timer quand on coche une série
-                resetTimer();
-                startTimer();
+                resetTimer(); // Reset chrono repos
+                startTimer(); // Start chrono repos
             }
             saveSeries(); 
         };
@@ -222,97 +265,78 @@ function checkPR() {
     document.getElementById('pr-badge').className = isPR ? 'pr-badge' : 'pr-badge hidden';
 }
 
-// HISTORIQUE DÉTAILLÉ
+// HISTORIQUE
 function loadHistory() {
     const c = document.getElementById('history-timeline'); c.innerHTML='';
     const h = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
     if(h.length===0) { c.innerHTML='<p class="empty-history">Pas d\'historique</p>'; return; }
-    
     h.forEach(x => {
         const d = document.createElement('div'); d.className='history-date-item';
-        const date = new Date(x.date).toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'});
-        
         let commentHTML = '';
-        if(x.data.comment && x.data.comment.trim() !== '') {
-            commentHTML = `<div class="history-comment">📝 ${x.data.comment}</div>`;
-        }
-
+        if(x.data.comment && x.data.comment.trim() !== '') commentHTML = `<div class="history-comment">📝 ${x.data.comment}</div>`;
         let seriesHTML = `<div class="history-series-grid">`;
         x.data.series.forEach((s,i) => {
-            // Détails complets: Reps, Kg, Repos, RIR
             let extras = [];
             if(s.repos) extras.push(`⏱️${(s.repos<10 && s.repos>0)?s.repos*60:s.repos}s`);
             if(s.rir) extras.push(`RIR:${s.rir}`);
-            
             let extraHTML = extras.length > 0 ? `<span class="h-extra">${extras.join(' | ')}</span>` : '';
-
-            seriesHTML += `
-            <div class="history-series-row">
-                <span class="h-num">#${i+1}</span>
-                <div class="h-data">
-                    <span class="h-main">${s.reps} x ${s.kg}kg</span>
-                    ${extraHTML}
-                </div>
-            </div>`;
+            seriesHTML += `<div class="history-series-row"><span class="h-num">#${i+1}</span><div class="h-data"><span class="h-main">${s.reps} x ${s.kg}kg</span>${extraHTML}</div></div>`;
         });
         seriesHTML += '</div>';
-        
-        d.innerHTML = `<div class="history-date-label">${date}</div>${commentHTML}${seriesHTML}`;
+        d.innerHTML = `<div class="history-date-label">${new Date(x.date).toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'})}</div>${commentHTML}${seriesHTML}`;
         c.appendChild(d);
     });
 }
 
-// LOGIQUE CHRONOMÈTRE
-function handleTimerClick() {
-    if(App.timerState === 'running') {
-        pauseTimer();
-    } else if (App.timerState === 'paused') {
-        resetTimer();
-    } else {
-        startTimer();
-    }
+// === TIMER REPOS (LOGIQUE : RUN -> PAUSE -> RESET -> RUN) ===
+function handleRestTimerClick() {
+    if(App.timerState === 'running') pauseTimer();
+    else if (App.timerState === 'paused') resetTimer();
+    else startTimer();
 }
-
 function startTimer() {
     document.getElementById('start-timer-btn').classList.add('timer-active');
-    document.getElementById('start-timer-btn').style.borderColor = ''; // Reset couleur pause
+    document.getElementById('start-timer-btn').style.borderColor = '';
     App.timerState = 'running';
     App.timerStartTime = Date.now() - App.timerElapsed;
-    
     if(App.timerInterval) clearInterval(App.timerInterval);
-    
-    App.timerInterval = setInterval(() => {
-        App.timerElapsed = Date.now() - App.timerStartTime;
-        updateTimerDisplay();
-    }, 1000);
+    App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; updateTimerDisplay(); }, 1000);
 }
-
 function pauseTimer() {
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerState = 'paused';
-    // Indicateur visuel de pause (orange)
     document.getElementById('start-timer-btn').classList.remove('timer-active');
-    document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
+    document.getElementById('start-timer-btn').style.borderColor = '#f59e0b'; // Orange
 }
-
 function resetTimer() {
     if(App.timerInterval) clearInterval(App.timerInterval);
-    App.timerInterval = null;
-    App.timerElapsed = 0;
-    App.timerState = 'stopped';
+    App.timerInterval = null; App.timerElapsed = 0; App.timerState = 'stopped';
     document.getElementById('start-timer-btn').classList.remove('timer-active');
     document.getElementById('start-timer-btn').style.borderColor = '';
     document.getElementById('start-timer-btn').innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 }
-
-function stopTimer(force = false) {
-    if(force) resetTimer();
+function stopRestTimer(force = false) { if(force) resetTimer(); }
+function updateTimerDisplay() {
+    const m = Math.floor(App.timerElapsed/60000); const s = Math.floor((App.timerElapsed%60000)/1000);
+    document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
 }
 
-function updateTimerDisplay() {
-    const m = Math.floor(App.timerElapsed/60000);
-    const s = Math.floor((App.timerElapsed%60000)/1000);
-    document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
+// === TIMER SÉANCE (NOUVEAU) ===
+function startSessionTimer() {
+    const display = document.getElementById('session-total-timer');
+    if(!display) return;
+    App.sessionStartTime = Date.now();
+    if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
+    App.sessionTimerInterval = setInterval(() => {
+        const diff = Date.now() - App.sessionStartTime;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        display.textContent = (h > 0 ? h + ':' : '') + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+    }, 1000);
+}
+function stopSessionTimer() {
+    if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
 }
 
 function showOptionsMenu() {
@@ -334,7 +358,6 @@ function importDataFile(e) { const r = new FileReader(); r.onload = (evt) => { i
 
 function showNotification(m, t='info') { const n = document.createElement('div'); n.className=`notification notification-${t}`; n.textContent=m; document.body.appendChild(n); setTimeout(()=>n.classList.add('show'),10); setTimeout(()=>{n.classList.remove('show'); setTimeout(()=>n.remove(),300)}, 3000); }
 
-// STATS (CORRECTION MATHS INFINITY/NAN)
 function initHistoriqueView() { document.getElementById('prev-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()-1); renderCalendar();}); document.getElementById('next-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()+1); renderCalendar();}); }
 function refreshHistoriqueView() {
     document.getElementById('total-sessions').textContent = Storage.getTotalSessionsCount();
@@ -353,18 +376,10 @@ function updateChart() {
     
     const vals = hist.map(h => {
         const seriesVals = h.data.series.map(s=>parseFloat(s.kg)||0);
-        // Gestion cas vide
         if (seriesVals.length === 0) return 0;
-
-        return App.statsState.metric==='weight' 
-            ? Math.max(...seriesVals) 
-            : h.data.series.reduce((a,b)=>a+(parseFloat(b.kg||0)*parseInt(b.reps||0)),0);
+        return App.statsState.metric==='weight' ? Math.max(...seriesVals) : h.data.series.reduce((a,b)=>a+(parseFloat(b.kg||0)*parseInt(b.reps||0)),0);
     });
-
-    const max = Math.max(...vals); 
-    const min = Math.min(...vals);
-    const range = (max - min) === 0 ? 10 : (max - min); // Évite division par 0
-    
+    const max = Math.max(...vals); const min = Math.min(...vals); const range = (max - min) === 0 ? 10 : (max - min);
     let path = "";
     vals.forEach((v, i) => {
         const x = 5 + (i/(vals.length-1))*90;
@@ -372,29 +387,18 @@ function updateChart() {
         path += `${x},${y} `;
     });
     cont.innerHTML = `<svg viewBox="0 0 100 100" class="chart-svg"><polyline fill="none" stroke="#ef4444" stroke-width="2" points="${path}" vector-effect="non-scaling-stroke"/></svg>`;
-    
     document.getElementById('chart-stats-summary').classList.remove('hidden');
     document.getElementById('stat-max-val').textContent = max;
     document.getElementById('stat-last-val').textContent = vals[vals.length-1];
-    
-    // Correction % Progression
-    const prev = vals[0];
-    const last = vals[vals.length-1];
-    let pText = "0%";
-    let pColor = "#888";
-
+    const prev = vals[0]; const last = vals[vals.length-1];
+    let pText = "0%"; let pColor = "#888";
     if (prev === 0) {
         if (last > 0) { pText = "Nouveau"; pColor = "#22c55e"; }
-        else { pText = "0%"; pColor = "#888"; }
     } else {
         const p = ((last - prev) / prev) * 100;
-        pText = (p>0?'+':'')+p.toFixed(1)+'%';
-        pColor = p>=0?'#22c55e':'#ef4444';
+        pText = (p>0?'+':'')+p.toFixed(1)+'%'; pColor = p>=0?'#22c55e':'#ef4444';
     }
-
-    const pEl = document.getElementById('stat-progression');
-    pEl.textContent = pText;
-    pEl.style.color = pColor;
+    const pEl = document.getElementById('stat-progression'); pEl.textContent = pText; pEl.style.color = pColor;
 }
 
 function renderCalendar() {
