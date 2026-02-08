@@ -4,8 +4,7 @@ const Storage = {
         SESSIONS: 'musculation_sessions'
     },
 
-    // --- GESTION DES MODÈLES DE SÉANCES ---
-
+    // --- SÉANCES ---
     getSeances() {
         return JSON.parse(localStorage.getItem(this.KEYS.SEANCES) || '[]');
     },
@@ -37,33 +36,42 @@ const Storage = {
         this.saveSeances(seances);
     },
 
-    // --- GESTION DES EXERCICES (Avec Réutilisation Historique) ---
-
+    // --- EXERCICES (LOGIQUE DE RÉUTILISATION CORRIGÉE) ---
     addExercise(seanceId, name, muscleGroup = '') {
         const seances = this.getSeances();
         const seance = seances.find(s => s.id === seanceId);
         
         if (seance) {
-            // 1. Chercher si ce nom existe déjà (nettoyé des espaces et majuscules)
-            const allEx = this.getAllExercisesFlat();
-            const existing = allEx.find(e => e.name.trim().toLowerCase() === name.trim().toLowerCase());
-
-            // 2. Si oui, on reprend SON id. Sinon, on en crée un nouveau.
-            // C'est ça qui permet de lier l'historique entre différentes séances.
-            const newId = existing ? existing.id : Date.now().toString();
+            // 1. Nettoyage de la saisie (minuscules + sans espaces autour)
+            const cleanInputName = name.trim().toLowerCase();
             
-            // 3. On garde le groupe musculaire existant s'il n'est pas précisé
-            const finalMuscle = muscleGroup || (existing ? existing.muscleGroup : '');
+            // 2. Récupérer tous les exercices existants
+            const allExercises = this.getAllExercisesFlat();
+            
+            // 3. Chercher une correspondance exacte (insensible à la casse)
+            const existingExercise = allExercises.find(e => e.name.trim().toLowerCase() === cleanInputName);
+            
+            // 4. DÉCISION :
+            // - Si trouvé : On reprend son ID (Liaison historique)
+            // - Sinon : On crée un nouvel ID
+            const newId = existingExercise ? existingExercise.id : Date.now().toString();
+            
+            // - Si trouvé : On reprend son nom "propre" (ex: "Dips" au lieu de "dips")
+            // - Sinon : On prend ce que l'utilisateur a tapé
+            const finalName = existingExercise ? existingExercise.name : name.trim();
+            
+            // - Si trouvé : On reprend son groupe musculaire s'il n'est pas précisé
+            const finalMuscle = muscleGroup || (existingExercise ? existingExercise.muscleGroup : '');
 
-            const newEx = {
+            const newExercise = {
                 id: newId,
-                name: name.trim(), // On garde le nom propre
+                name: finalName,
                 muscleGroup: finalMuscle
             };
             
-            seance.exercises.push(newEx);
+            seance.exercises.push(newExercise);
             this.saveSeances(seances);
-            return newEx;
+            return newExercise;
         }
         return null;
     },
@@ -90,10 +98,9 @@ const Storage = {
         const seances = this.getSeances();
         const all = [];
         const seenIds = new Set();
-        
-        seances.forEach(seance => {
-            if (seance.exercises) {
-                seance.exercises.forEach(ex => {
+        seances.forEach(s => {
+            if (s.exercises) {
+                s.exercises.forEach(ex => {
                     if (!seenIds.has(ex.id)) {
                         seenIds.add(ex.id);
                         all.push(ex);
@@ -104,8 +111,7 @@ const Storage = {
         return all;
     },
 
-    // --- GESTION DES SESSIONS (SÉANCES EFFECTUÉES) ---
-
+    // --- SESSIONS ---
     getSessions() {
         return JSON.parse(localStorage.getItem(this.KEYS.SESSIONS) || '[]');
     },
@@ -114,43 +120,32 @@ const Storage = {
         localStorage.setItem(this.KEYS.SESSIONS, JSON.stringify(sessions));
     },
 
-    // Créer ou récupérer une session pour une date donnée
-    addSession(seanceId, date) {
+    getTodaySession(seanceId) {
         const sessions = this.getSessions();
-        let session = sessions.find(s => s.seanceId === seanceId && s.date === date);
+        const today = new Date().toISOString().split('T')[0];
+        let session = sessions.find(s => s.seanceId === seanceId && s.date === today);
         
         if (!session) {
             session = {
                 id: Date.now().toString(),
                 seanceId: seanceId,
-                date: date,
+                date: today,
                 exercises: {},
                 completed: false
             };
             sessions.push(session);
             this.saveSessions(sessions);
         }
-        
         return session;
     },
 
-    // Récupérer la session du jour
-    getTodaySession(seanceId) {
-        const today = new Date().toISOString().split('T')[0];
-        return this.addSession(seanceId, today);
-    },
-
-    // Valider une session (Fin de séance)
     completeSession(sessionId) {
         const sessions = this.getSessions();
         const session = sessions.find(s => s.id === sessionId);
-        
         if (session) {
             if (session.completed !== true) {
-                const now = new Date();
                 session.completed = true;
-                session.completedAt = now.toISOString();
-                session.date = now.toISOString().split('T')[0]; // La date devient celle de la validation
+                session.date = new Date().toISOString().split('T')[0]; // Date figée à la validation
             }
             this.saveSessions(sessions);
             return session;
@@ -158,46 +153,33 @@ const Storage = {
         return null;
     },
 
-    // --- GESTION DES DONNÉES D'EXERCICE (SÉRIES) ---
-
     saveExerciseData(sessionId, exerciseId, data) {
         const sessions = this.getSessions();
         const session = sessions.find(s => s.id === sessionId);
-        
         if (session) {
-            if (!session.exercises) {
-                session.exercises = {};
-            }
+            if (!session.exercises) session.exercises = {};
             session.exercises[exerciseId] = data;
             this.saveSessions(sessions);
         }
     },
 
     getExerciseData(sessionId, exerciseId) {
-        const sessions = this.getSessions();
-        const session = sessions.find(s => s.id === sessionId);
-        
+        const session = this.getSessions().find(s => s.id === sessionId);
         if (session && session.exercises && session.exercises[exerciseId]) {
             return session.exercises[exerciseId];
         }
-        
-        return {
-            comment: '',
-            series: []
-        };
+        return { comment: '', series: [] };
     },
 
-    // --- HISTORIQUE ET STATISTIQUES ---
-
-    // Historique global (toutes séances confondues par ID d'exercice)
+    // --- HISTORIQUE & STATS ---
+    
+    // Récupère tout l'historique global d'un exercice (par ID)
     getGlobalExerciseHistory(exerciseId) {
         const sessions = this.getSessions();
         const history = [];
         
         sessions.forEach(session => {
-            // Ignorer les sessions brouillons non terminées
-            if (session.completed === false) return;
-
+            if (session.completed === false) return; // Ignore les séances non finies
             if (session.exercises && session.exercises[exerciseId]) {
                 history.push({ date: session.date, data: session.exercises[exerciseId] });
             }
@@ -206,38 +188,31 @@ const Storage = {
         return history.filter(h => h.data.series && h.data.series.length > 0);
     },
 
-    // Historique filtré pour l'affichage "dans la séance" (exclut aujourd'hui)
+    // Récupère l'historique pour l'affichage dans la séance (exclut aujourd'hui)
     getExerciseHistory(seanceId, exerciseId) {
         const today = new Date().toISOString().split('T')[0];
-        
         return this.getGlobalExerciseHistory(exerciseId)
             .filter(h => h.date !== today)
-            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Plus récent d'abord
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
     },
 
-    // Récupérer toutes les dates avec des sessions TERMINÉES
+    getTotalSessionsCount() {
+        return this.getSessions().filter(s => s.completed === true || s.completed === undefined).length;
+    },
+
     getSessionDates() {
-        const sessions = this.getSessions();
-        return sessions
+        return this.getSessions()
             .filter(s => s.completed === true || s.completed === undefined)
             .map(s => s.date);
     },
 
-    // Compter le nombre total de sessions TERMINÉES
-    getTotalSessionsCount() {
-        return this.getSessions()
-            .filter(s => s.completed === true || s.completed === undefined)
-            .length;
-    },
-
-    // --- PREMIUM FEATURES (Export/Import/PR) ---
-
+    // --- PREMIUM (Export/Import/PR) ---
     exportData() {
         const data = {
             seances: this.getSeances(),
             sessions: this.getSessions(),
-            version: '1.3',
-            exportDate: new Date().toISOString()
+            version: '1.4',
+            date: new Date().toISOString()
         };
         return JSON.stringify(data);
     },
@@ -257,30 +232,23 @@ const Storage = {
         }
     },
 
-    checkIsPR(exerciseId, weight, reps) {
+    checkIsPR(exerciseId, weight) {
         if (!weight || weight <= 0) return false;
-        
-        // Récupérer tout l'historique
         const history = this.getGlobalExerciseHistory(exerciseId);
+        if (history.length === 0) return true;
         
-        if (history.length === 0) return true; // Premier set ever = PR !
-
-        // Trouver le max weight historique
-        let maxWeight = 0;
+        let max = 0;
         history.forEach(h => {
             h.data.series.forEach(s => {
-                if (s.kg && parseFloat(s.kg) > maxWeight) {
-                    maxWeight = parseFloat(s.kg);
+                if (s.kg && parseFloat(s.kg) > max) {
+                    max = parseFloat(s.kg);
                 }
             });
         });
-
-        // Est-ce un nouveau record ?
-        return parseFloat(weight) > maxWeight;
+        return parseFloat(weight) > max;
     }
 };
 
-// Export pour utilisation
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Storage;
 }
