@@ -1,6 +1,7 @@
 const App = {
     currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
-    currentCalendarMonth: new Date(), timerInterval: null, timerStartTime: null, timerElapsed: 0,
+    currentCalendarMonth: new Date(),
+    timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', // stopped, running, paused
     statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
 };
 const MUSCLE_ICONS = { default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>` };
@@ -9,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initNavigation(); initSeancesListView(); initSeanceDetailView(); initHistoriqueView(); initPerformanceView(); renderSeancesList();
 });
 
+// NAVIGATION
 function initNavigation() {
     document.querySelectorAll('.nav-btn-modern').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -26,7 +28,7 @@ function switchToView(id) {
     if (id === 'seances-list-view') renderSeancesList();
 }
 
-// LISTE
+// LISTE SÉANCES
 function initSeancesListView() {
     document.getElementById('add-seance-header-btn').addEventListener('click', openSeanceModal);
     document.getElementById('cancel-seance-btn').addEventListener('click', closeSeanceModal);
@@ -50,11 +52,11 @@ function renderSeancesList() {
         grid.appendChild(card);
     });
 }
-function openSeanceModal() { document.getElementById('seance-modal').classList.add('active'); document.getElementById('new-seance-name').value = ''; setTimeout(()=>document.getElementById('new-seance-name').focus(), 100); }
+function openSeanceModal() { document.getElementById('seance-modal').classList.add('active'); document.getElementById('new-seance-name').focus(); }
 function closeSeanceModal() { document.getElementById('seance-modal').classList.remove('active'); }
 function saveNewSeance() { const n = document.getElementById('new-seance-name').value.trim(); if(n) { Storage.addSeance(n); closeSeanceModal(); renderSeancesList(); } }
 
-// DETAIL
+// DÉTAIL SÉANCE
 function openSeanceDetail(id) {
     App.currentSeanceId = id;
     const s = Storage.getSeance(id);
@@ -66,21 +68,28 @@ function openSeanceDetail(id) {
     btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
     btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn";
     
+    // AUTO-START CHRONO (Reset puis Start)
+    resetTimer();
+    startTimer();
+    
     if (s.exercises.length > 0) selectExerciseInDetail(s.exercises[0].id);
     else document.getElementById('exercise-detail-content').classList.add('hidden');
     switchToView('seance-detail-view');
 }
 function initSeanceDetailView() {
-    document.getElementById('back-to-list').addEventListener('click', () => switchToView('seances-list-view'));
+    document.getElementById('back-to-list').addEventListener('click', () => { stopTimer(true); switchToView('seances-list-view'); });
     document.getElementById('cancel-exercise-btn').addEventListener('click', () => document.getElementById('exercise-modal').classList.remove('active'));
     document.getElementById('save-exercise-btn').addEventListener('click', saveNewExercise);
     document.getElementById('add-series-detail-btn').addEventListener('click', addSeries);
     document.querySelector('.btn-delete-series').addEventListener('click', deleteSelectedSeries);
-    document.getElementById('start-timer-btn').addEventListener('click', toggleTimer);
+    
+    // Gestionnaire de Clic Chrono (Logique Start/Pause/Reset)
+    document.getElementById('start-timer-btn').addEventListener('click', handleTimerClick);
+    
     document.getElementById('exercise-comment-detail').addEventListener('input', () => saveSeries());
     document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
     document.getElementById('finish-session-btn').addEventListener('click', () => {
-        if(Storage.completeSession(App.currentSessionId)) { showNotification('Validé !', 'success'); switchToView('seances-list-view'); }
+        if(Storage.completeSession(App.currentSessionId)) { showNotification('Validé !', 'success'); switchToView('seances-list-view'); stopTimer(true); }
     });
 }
 
@@ -129,20 +138,33 @@ function selectExerciseInDetail(id) {
 
 function openExerciseModal() {
     document.getElementById('exercise-modal').classList.add('active');
-    const input = document.getElementById('new-exercise-name'); input.value='';
-    setTimeout(()=>input.focus(), 100);
-    const list = document.getElementById('exercises-list'); list.innerHTML='';
-    [...new Set(Storage.getAllExercisesFlat().map(e=>e.name))].sort().forEach(n => {
-        const opt = document.createElement('option'); opt.value = n; list.appendChild(opt);
+    const input = document.getElementById('new-exercise-name');
+    input.value = '';
+    setTimeout(() => input.focus(), 100);
+    
+    // Remplissage Datalist (Suggestions)
+    const list = document.getElementById('exercises-list');
+    list.innerHTML = '';
+    const all = Storage.getAllExercisesFlat();
+    // Trie alphabétique et unicité
+    const uniqueNames = [...new Set(all.map(e => e.name))].sort();
+    uniqueNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        list.appendChild(opt);
     });
 }
+
 function saveNewExercise() {
-    const n = document.getElementById('new-exercise-name').value;
-    if(n) { 
-        const ex = Storage.addExercise(App.currentSeanceId, n, document.getElementById('new-exercise-muscle').value);
+    const name = document.getElementById('new-exercise-name').value.trim();
+    const muscle = document.getElementById('new-exercise-muscle').value.trim();
+    if(name) { 
+        // La fonction addExercise de storage.js gère la réutilisation d'ID
+        const ex = Storage.addExercise(App.currentSeanceId, name, muscle);
         document.getElementById('exercise-modal').classList.remove('active');
         renderExerciseCarousel(Storage.getSeance(App.currentSeanceId));
         selectExerciseInDetail(ex.id);
+        showNotification('Exercice ajouté', 'success');
     }
 }
 
@@ -154,7 +176,14 @@ function renderSeriesTable(series) {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td><input type="checkbox" class="series-select"></td><td>${i+1}</td><td><input type="number" class="reps" value="${s.reps||''}" placeholder="0"></td><td><input type="number" class="kg" value="${s.kg||''}" placeholder="0"></td><td><input type="number" class="repos" value="${(s.repos<10 && s.repos>0)?s.repos*60:(s.repos||'')}" placeholder="s"></td><td><input type="number" class="rir" value="${s.rir||''}" placeholder="-"></td><td><input type="checkbox" class="fait" ${s.fait?'checked':''}></td>`;
         tr.querySelectorAll('input:not(.series-select)').forEach(i => i.onchange = () => { saveSeries(); checkPR(); });
-        tr.querySelector('.fait').onchange = (e) => { if(e.target.checked) startTimer(); saveSeries(); };
+        tr.querySelector('.fait').onchange = (e) => { 
+            if(e.target.checked) {
+                // Auto-start timer quand on coche une série
+                resetTimer();
+                startTimer();
+            }
+            saveSeries(); 
+        };
         tb.appendChild(tr);
     });
 }
@@ -193,23 +222,98 @@ function checkPR() {
     document.getElementById('pr-badge').className = isPR ? 'pr-badge' : 'pr-badge hidden';
 }
 
-// HISTORIQUE
+// HISTORIQUE DÉTAILLÉ
 function loadHistory() {
     const c = document.getElementById('history-timeline'); c.innerHTML='';
     const h = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
     if(h.length===0) { c.innerHTML='<p class="empty-history">Pas d\'historique</p>'; return; }
+    
     h.forEach(x => {
         const d = document.createElement('div'); d.className='history-date-item';
-        let html = `<div class="history-date-label">${new Date(x.date).toLocaleDateString('fr-FR')}</div><div class="history-series-grid">`;
-        x.data.series.forEach((s,i) => html+=`<div class="history-series-row"><span>${i+1}</span><span>${s.reps}x${s.kg}kg</span></div>`);
-        d.innerHTML = html+'</div>'; c.appendChild(d);
+        const date = new Date(x.date).toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'});
+        
+        let commentHTML = '';
+        if(x.data.comment && x.data.comment.trim() !== '') {
+            commentHTML = `<div class="history-comment">📝 ${x.data.comment}</div>`;
+        }
+
+        let seriesHTML = `<div class="history-series-grid">`;
+        x.data.series.forEach((s,i) => {
+            // Détails complets: Reps, Kg, Repos, RIR
+            let extras = [];
+            if(s.repos) extras.push(`⏱️${(s.repos<10 && s.repos>0)?s.repos*60:s.repos}s`);
+            if(s.rir) extras.push(`RIR:${s.rir}`);
+            
+            let extraHTML = extras.length > 0 ? `<span class="h-extra">${extras.join(' | ')}</span>` : '';
+
+            seriesHTML += `
+            <div class="history-series-row">
+                <span class="h-num">#${i+1}</span>
+                <div class="h-data">
+                    <span class="h-main">${s.reps} x ${s.kg}kg</span>
+                    ${extraHTML}
+                </div>
+            </div>`;
+        });
+        seriesHTML += '</div>';
+        
+        d.innerHTML = `<div class="history-date-label">${date}</div>${commentHTML}${seriesHTML}`;
+        c.appendChild(d);
     });
 }
 
-// TIMER & OPTIONS
-function toggleTimer() { App.timerInterval ? stopTimer() : startTimer(); }
-function startTimer() { document.getElementById('start-timer-btn').classList.add('timer-active'); App.timerStartTime = Date.now() - App.timerElapsed; App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; const m=Math.floor(App.timerElapsed/60000), s=Math.floor((App.timerElapsed%60000)/1000); document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`; }, 1000); }
-function stopTimer() { clearInterval(App.timerInterval); App.timerInterval=null; document.getElementById('start-timer-btn').classList.remove('timer-active'); document.getElementById('start-timer-btn').innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`; App.timerElapsed=0; }
+// LOGIQUE CHRONOMÈTRE
+function handleTimerClick() {
+    if(App.timerState === 'running') {
+        pauseTimer();
+    } else if (App.timerState === 'paused') {
+        resetTimer();
+    } else {
+        startTimer();
+    }
+}
+
+function startTimer() {
+    document.getElementById('start-timer-btn').classList.add('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = ''; // Reset couleur pause
+    App.timerState = 'running';
+    App.timerStartTime = Date.now() - App.timerElapsed;
+    
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    
+    App.timerInterval = setInterval(() => {
+        App.timerElapsed = Date.now() - App.timerStartTime;
+        updateTimerDisplay();
+    }, 1000);
+}
+
+function pauseTimer() {
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    App.timerState = 'paused';
+    // Indicateur visuel de pause (orange)
+    document.getElementById('start-timer-btn').classList.remove('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
+}
+
+function resetTimer() {
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    App.timerInterval = null;
+    App.timerElapsed = 0;
+    App.timerState = 'stopped';
+    document.getElementById('start-timer-btn').classList.remove('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = '';
+    document.getElementById('start-timer-btn').innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+}
+
+function stopTimer(force = false) {
+    if(force) resetTimer();
+}
+
+function updateTimerDisplay() {
+    const m = Math.floor(App.timerElapsed/60000);
+    const s = Math.floor((App.timerElapsed%60000)/1000);
+    document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
+}
 
 function showOptionsMenu() {
     const m = document.createElement('div'); m.className='options-menu active';
@@ -225,13 +329,12 @@ function showOptionsMenu() {
     };
 }
 
-// IMPORT/EXPORT
 function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Storage.exportData()], {type:'application/json'})); a.download = `sauvegarde_malzou_${new Date().toISOString().split('T')[0]}.json`; a.click(); }
 function importDataFile(e) { const r = new FileReader(); r.onload = (evt) => { if(Storage.importData(evt.target.result)) { showNotification('Succès !', 'success'); setTimeout(()=>location.reload(), 1000); } else showNotification('Erreur fichier', 'error'); }; if(e.target.files[0]) r.readAsText(e.target.files[0]); }
 
 function showNotification(m, t='info') { const n = document.createElement('div'); n.className=`notification notification-${t}`; n.textContent=m; document.body.appendChild(n); setTimeout(()=>n.classList.add('show'),10); setTimeout(()=>{n.classList.remove('show'); setTimeout(()=>n.remove(),300)}, 3000); }
 
-// STATS
+// STATS (CORRECTION MATHS INFINITY/NAN)
 function initHistoriqueView() { document.getElementById('prev-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()-1); renderCalendar();}); document.getElementById('next-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()+1); renderCalendar();}); }
 function refreshHistoriqueView() {
     document.getElementById('total-sessions').textContent = Storage.getTotalSessionsCount();
@@ -249,14 +352,23 @@ function updateChart() {
     if(hist.length < 2) { cont.innerHTML = '<div class="empty-chart-msg" style="text-align:center;color:#666;padding:20px;">Pas assez de données</div>'; return; }
     
     const vals = hist.map(h => {
-        const valid = h.data.series.filter(s=>s.kg>0);
-        return App.statsState.metric==='weight' ? Math.max(...valid.map(s=>parseFloat(s.kg)||0)) : valid.reduce((a,b)=>a+(parseFloat(b.kg)*parseInt(b.reps)),0);
+        const seriesVals = h.data.series.map(s=>parseFloat(s.kg)||0);
+        // Gestion cas vide
+        if (seriesVals.length === 0) return 0;
+
+        return App.statsState.metric==='weight' 
+            ? Math.max(...seriesVals) 
+            : h.data.series.reduce((a,b)=>a+(parseFloat(b.kg||0)*parseInt(b.reps||0)),0);
     });
-    const max = Math.max(...vals); const min = Math.min(...vals)*0.9;
+
+    const max = Math.max(...vals); 
+    const min = Math.min(...vals);
+    const range = (max - min) === 0 ? 10 : (max - min); // Évite division par 0
+    
     let path = "";
     vals.forEach((v, i) => {
         const x = 5 + (i/(vals.length-1))*90;
-        const y = 100 - 5 - ((v-min)/(max-min || 1))*90;
+        const y = 100 - 5 - ((v-min)/range)*90;
         path += `${x},${y} `;
     });
     cont.innerHTML = `<svg viewBox="0 0 100 100" class="chart-svg"><polyline fill="none" stroke="#ef4444" stroke-width="2" points="${path}" vector-effect="non-scaling-stroke"/></svg>`;
@@ -264,10 +376,25 @@ function updateChart() {
     document.getElementById('chart-stats-summary').classList.remove('hidden');
     document.getElementById('stat-max-val').textContent = max;
     document.getElementById('stat-last-val').textContent = vals[vals.length-1];
-    const p = ((vals[vals.length-1]-vals[0])/vals[0])*100;
+    
+    // Correction % Progression
+    const prev = vals[0];
+    const last = vals[vals.length-1];
+    let pText = "0%";
+    let pColor = "#888";
+
+    if (prev === 0) {
+        if (last > 0) { pText = "Nouveau"; pColor = "#22c55e"; }
+        else { pText = "0%"; pColor = "#888"; }
+    } else {
+        const p = ((last - prev) / prev) * 100;
+        pText = (p>0?'+':'')+p.toFixed(1)+'%';
+        pColor = p>=0?'#22c55e':'#ef4444';
+    }
+
     const pEl = document.getElementById('stat-progression');
-    pEl.textContent = (p>0?'+':'')+p.toFixed(1)+'%';
-    pEl.style.color = p>=0?'#22c55e':'#ef4444';
+    pEl.textContent = pText;
+    pEl.style.color = pColor;
 }
 
 function renderCalendar() {
