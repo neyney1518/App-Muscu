@@ -133,3 +133,69 @@ body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #
 .notification.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .notification-success { border-color: #22c55e; color: #22c55e; }
 .notification-error { border-color: #ef4444; color: #ef4444; }
+
+/* AJOUTER CECI À LA FIN DE VOTRE FICHIER ACTUEL */
+
+/* --- Historique Détaillé --- */
+.history-comment {
+    background: #222;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #bbb;
+    font-style: italic;
+    margin-bottom: 8px;
+    border-left: 3px solid #ef4444;
+}
+
+.history-series-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.history-series-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0a0a0a;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    border: 1px solid #1a1a1a;
+}
+
+.h-num {
+    color: #555;
+    font-size: 11px;
+    width: 25px;
+    font-weight: 700;
+}
+
+.h-data {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.h-main {
+    color: #fff;
+    font-weight: 700;
+}
+
+.h-extra {
+    color: #888;
+    font-size: 11px;
+    background: #1a1a1a;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+
+/* --- Timer --- */
+.timer-btn.timer-active {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+}
