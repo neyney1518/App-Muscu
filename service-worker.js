@@ -1,19 +1,18 @@
-// Service Worker pour fonctionnement offline
-// VERSION 8 (Mise à jour force)
-
-const CACHE_NAME = 'musculation-v8';
+// Service Worker - VERSION 10 (Force la mise à jour cache)
+const CACHE_NAME = 'musculation-v10';
 const urlsToCache = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
   '/storage.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
-// Installation
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  self.skipWaiting(); // Force l'installation immédiate
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -22,23 +21,21 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activation et nettoyage des vieux caches
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
+            return caches.delete(cacheName); // Supprime les anciens caches
           }
         })
       );
     })
   );
-  self.clients.claim();
+  self.clients.claim(); // Prend le contrôle immédiatement
 });
 
-// Interception des requêtes
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
@@ -47,6 +44,7 @@ self.addEventListener('fetch', event => {
           return response;
         }
         return fetch(event.request).then(response => {
+          // On ne met en cache que les requêtes valides
           if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
           }
