@@ -36,32 +36,30 @@ const Storage = {
         this.saveSeances(seances);
     },
 
-    // --- EXERCICES (LOGIQUE DE RÉUTILISATION CORRIGÉE) ---
+    // --- EXERCICES (RÉUTILISATION CORRIGÉE) ---
     addExercise(seanceId, name, muscleGroup = '') {
         const seances = this.getSeances();
         const seance = seances.find(s => s.id === seanceId);
         
         if (seance) {
-            // 1. Nettoyage de la saisie (minuscules + sans espaces autour)
+            // 1. Nettoyage de la saisie utilisateur (minuscules + sans espaces superflus)
             const cleanInputName = name.trim().toLowerCase();
             
-            // 2. Récupérer tous les exercices existants
+            // 2. Récupérer tous les exercices existants dans la base
             const allExercises = this.getAllExercisesFlat();
             
             // 3. Chercher une correspondance exacte (insensible à la casse)
             const existingExercise = allExercises.find(e => e.name.trim().toLowerCase() === cleanInputName);
             
-            // 4. DÉCISION :
-            // - Si trouvé : On reprend son ID (Liaison historique)
-            // - Sinon : On crée un nouvel ID
+            // 4. LIAISON DE L'HISTORIQUE :
+            // Si l'exo existe déjà, on reprend strictement son ID
             const newId = existingExercise ? existingExercise.id : Date.now().toString();
             
-            // - Si trouvé : On reprend son nom "propre" (ex: "Dips" au lieu de "dips")
-            // - Sinon : On prend ce que l'utilisateur a tapé
+            // On reprend son nom "propre" d'origine (ex: "Dips" au lieu de "dips")
             const finalName = existingExercise ? existingExercise.name : name.trim();
             
-            // - Si trouvé : On reprend son groupe musculaire s'il n'est pas précisé
-            const finalMuscle = muscleGroup || (existingExercise ? existingExercise.muscleGroup : '');
+            // On reprend son groupe musculaire s'il n'est pas reprécisé, sinon on met "Autre"
+            const finalMuscle = muscleGroup || (existingExercise ? existingExercise.muscleGroup : 'Autre');
 
             const newExercise = {
                 id: newId,
@@ -111,7 +109,7 @@ const Storage = {
         return all;
     },
 
-    // --- SESSIONS ---
+    // --- SESSIONS (SÉANCES RÉALISÉES) ---
     getSessions() {
         return JSON.parse(localStorage.getItem(this.KEYS.SESSIONS) || '[]');
     },
@@ -145,7 +143,8 @@ const Storage = {
         if (session) {
             if (session.completed !== true) {
                 session.completed = true;
-                session.date = new Date().toISOString().split('T')[0]; // Date figée à la validation
+                // La date devient officiellement celle de la validation
+                session.date = new Date().toISOString().split('T')[0]; 
             }
             this.saveSessions(sessions);
             return session;
@@ -173,13 +172,13 @@ const Storage = {
 
     // --- HISTORIQUE & STATS ---
     
-    // Récupère tout l'historique global d'un exercice (par ID)
+    // Récupère tout l'historique global d'un exercice (par ID unique)
     getGlobalExerciseHistory(exerciseId) {
         const sessions = this.getSessions();
         const history = [];
         
         sessions.forEach(session => {
-            if (session.completed === false) return; // Ignore les séances non finies
+            if (session.completed === false) return; // On ignore les séances non finies
             if (session.exercises && session.exercises[exerciseId]) {
                 history.push({ date: session.date, data: session.exercises[exerciseId] });
             }
@@ -193,7 +192,7 @@ const Storage = {
         const today = new Date().toISOString().split('T')[0];
         return this.getGlobalExerciseHistory(exerciseId)
             .filter(h => h.date !== today)
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
+            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Du plus récent au plus ancien
     },
 
     getTotalSessionsCount() {
@@ -211,7 +210,7 @@ const Storage = {
         const data = {
             seances: this.getSeances(),
             sessions: this.getSessions(),
-            version: '1.4',
+            version: '1.5',
             date: new Date().toISOString()
         };
         return JSON.stringify(data);
@@ -235,7 +234,7 @@ const Storage = {
     checkIsPR(exerciseId, weight) {
         if (!weight || weight <= 0) return false;
         const history = this.getGlobalExerciseHistory(exerciseId);
-        if (history.length === 0) return true;
+        if (history.length === 0) return true; // Premier record
         
         let max = 0;
         history.forEach(h => {
@@ -249,6 +248,7 @@ const Storage = {
     }
 };
 
+// Export pour le navigateur
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Storage;
 }
