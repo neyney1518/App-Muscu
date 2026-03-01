@@ -1,162 +1,525 @@
-/* Reset & Base */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #000; color: #fff; overscroll-behavior-y: none; }
-.view { display: none; min-height: 100vh; padding-bottom: 90px; }
-.view.active { display: block; }
+const App = {
+    currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
+    currentCalendarMonth: new Date(),
+    
+    // Timer Repos (Bouton rouge)
+    timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', // stopped, running, paused
+    
+    // Timer Session (Global en haut)
+    sessionTimerInterval: null, sessionStartTime: null,
 
-/* HEADER & SESSION TIMER */
-.main-header { padding: 60px 20px 20px; display: flex; justify-content: space-between; align-items: center; }
-.header-title-group { display: flex; align-items: center; gap: 12px; }
-.header-logo { width: 36px; height: 36px; border-radius: 10px; }
-.main-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
-.header-actions { display: flex; gap: 12px; align-items: center; }
-.header-icon-btn { background: 0 0; border: none; font-size: 24px; cursor: pointer; padding: 4px; }
-.header-add-btn { width: 40px; height: 40px; border-radius: 50%; background: #ef4444; border: none; color: #fff; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
+};
+const MUSCLE_ICONS = { default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>` };
 
-/* DETAIL HEADER & TIMERS */
-.detail-header { background: #000; padding: 50px 20px 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #111; }
-.header-center-info { flex: 1; display: flex; flex-direction: column; }
-.detail-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
-.session-timer { font-size: 13px; color: #888; font-variant-numeric: tabular-nums; font-weight: 500; margin-top: 2px; }
+document.addEventListener('DOMContentLoaded', () => {
+    initNavigation(); initSeancesListView(); initSeanceDetailView(); initHistoriqueView(); initPerformanceView(); renderSeancesList();
+});
 
-.back-btn, .options-btn { background: 0 0; border: none; color: #ef4444; padding: 8px; font-size: 24px; }
-.options-btn { color: #fff; }
-.timer-btn { background: 0 0; border: none; color: #ef4444; min-width: 50px; transition: all 0.2s; }
-.timer-btn.timer-active { background: #ef4444; color: #fff; border-radius: 12px; padding: 4px 10px; }
+// === NAVIGATION ===
+function initNavigation() {
+    document.querySelectorAll('.nav-btn-modern').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.view === 'seances-list') switchToView('seances-list-view');
+            else switchToView('historique-view');
+            document.querySelectorAll('.nav-btn-modern').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+}
+function switchToView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === 'historique-view') refreshHistoriqueView();
+    if (id === 'seances-list-view') renderSeancesList();
+}
 
-/* SUGGESTIONS LIST (AUTOCOMPLETE) */
-.suggestions-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #1a1a1a; border: 1px solid #333; border-radius: 0 0 12px 12px; max-height: 200px; overflow-y: auto; z-index: 5000; margin-top: -16px; }
-.suggestion-item { padding: 12px 16px; border-bottom: 1px solid #2a2a2a; cursor: pointer; font-size: 15px; color: #ddd; }
-.suggestion-item:active { background: #2a2a2a; color: #ef4444; }
+// === LISTE SÉANCES ===
+function initSeancesListView() {
+    document.getElementById('add-seance-header-btn').addEventListener('click', openSeanceModal);
+    document.getElementById('cancel-seance-btn').addEventListener('click', closeSeanceModal);
+    document.getElementById('save-seance-btn').addEventListener('click', saveNewSeance);
+    document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-modal').classList.add('active'));
+    document.getElementById('close-settings-btn').addEventListener('click', () => document.getElementById('settings-modal').classList.remove('active'));
+    document.getElementById('export-data-btn').addEventListener('click', exportData);
+    document.getElementById('import-data-btn').addEventListener('click', () => document.getElementById('import-file-input').click());
+    document.getElementById('import-file-input').addEventListener('change', importDataFile);
+}
+function renderSeancesList() {
+    const grid = document.getElementById('seances-grid'); grid.innerHTML = '';
+    const seances = Storage.getSeances();
+    if (seances.length === 0) { document.getElementById('empty-seances').classList.remove('hidden'); return; }
+    document.getElementById('empty-seances').classList.add('hidden');
+    seances.forEach(s => {
+        const card = document.createElement('div'); card.className = 'seance-card';
+        card.innerHTML = `<div class="seance-content-wrapper"><div class="seance-icon">${MUSCLE_ICONS.default}</div><div class="seance-name">${s.name}</div><div class="seance-exercises-count">${s.exercises.length} exos</div></div><button class="card-delete-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
+        card.querySelector('.seance-content-wrapper').addEventListener('click', () => openSeanceDetail(s.id));
+        card.querySelector('.card-delete-btn').addEventListener('click', (e) => { e.stopPropagation(); if(confirm('Supprimer ?')) { Storage.deleteSeance(s.id); renderSeancesList(); }});
+        grid.appendChild(card);
+    });
+}
+function openSeanceModal() { document.getElementById('seance-modal').classList.add('active'); document.getElementById('new-seance-name').value=''; setTimeout(()=>document.getElementById('new-seance-name').focus(), 100); }
+function closeSeanceModal() { document.getElementById('seance-modal').classList.remove('active'); }
+function saveNewSeance() { const n = document.getElementById('new-seance-name').value.trim(); if(n) { Storage.addSeance(n); closeSeanceModal(); renderSeancesList(); } }
 
-/* SELECT MODERNE */
-select.input-modern { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em; cursor: pointer; }
+// === DÉTAIL SÉANCE ===
+function openSeanceDetail(id) {
+    App.currentSeanceId = id;
+    const s = Storage.getSeance(id);
+    const sess = Storage.getTodaySession(id);
+    App.currentSessionId = sess.id;
+    document.getElementById('seance-title').textContent = s.name;
+    renderExerciseCarousel(s);
+    
+    const btn = document.getElementById('finish-session-btn');
+    btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
+    btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn";
+    
+    // Démarrage des chronos
+    startSessionTimer(); 
+    resetRestTimer();
+    updateLiveVolume();
 
-/* DASHBOARD */
-.content-container { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-.dashboard-card { background: #111; border: 1px solid #222; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; }
-.card-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #fff; }
-.card-header-icon { font-size: 32px; margin-bottom: 8px; text-align: center; }
-.stat-value-modern { font-size: 42px; font-weight: 800; color: #ef4444; text-align: center; line-height: 1; }
-.stat-label-modern { font-size: 14px; color: #666; text-align: center; margin-top: 8px; font-weight: 500; }
+    if (s.exercises.length > 0) selectExerciseInDetail(s.exercises[0].id);
+    else document.getElementById('exercise-detail-content').classList.add('hidden');
+    switchToView('seance-detail-view');
+}
 
-/* BARRES MUSCLES */
-.muscle-row { display: flex; align-items: center; margin-bottom: 14px; }
-.muscle-name { width: 90px; font-size: 12px; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.muscle-bar-wrapper { flex: 1; background: #1a1a1a; height: 14px; border-radius: 8px; overflow: hidden; margin: 0 12px; position: relative; }
-.muscle-bar-fill { height: 100%; background: linear-gradient(90deg, #ef4444 0%, #ff6b6b 100%); border-radius: 8px; transition: width 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-.muscle-count { width: 20px; font-size: 13px; font-weight: 800; color: #fff; text-align: right; }
+function initSeanceDetailView() {
+    document.getElementById('back-to-list').addEventListener('click', () => { 
+        stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); 
+    });
+    document.getElementById('cancel-exercise-btn').addEventListener('click', () => document.getElementById('exercise-modal').classList.remove('active'));
+    document.getElementById('save-exercise-btn').addEventListener('click', saveNewExercise);
+    document.getElementById('add-series-detail-btn').addEventListener('click', addSeries);
+    document.querySelector('.btn-delete-series').addEventListener('click', deleteSelectedSeries);
+    
+    document.getElementById('start-timer-btn').addEventListener('click', handleRestTimerClick);
+    document.getElementById('new-exercise-name').addEventListener('input', handleInputSuggestions);
+    document.getElementById('exercise-comment-detail').addEventListener('input', () => saveSeries());
+    document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
+    document.getElementById('finish-session-btn').addEventListener('click', () => {
+        if(Storage.completeSession(App.currentSessionId)) { 
+            showNotification('Validé !', 'success'); stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); 
+        }
+    });
+}
 
-/* CALENDRIER */
-.calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #0a0a0a; padding: 8px; border-radius: 12px; }
-.calendar-nav-btn { width: 32px; height: 32px; border-radius: 8px; background: #222; border: none; color: #fff; font-size: 18px; cursor: pointer; }
-.calendar-month-label { font-size: 16px; font-weight: 600; text-transform: capitalize; }
-.calendar-modern { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.calendar-day-header { text-align: center; font-size: 11px; font-weight: 600; color: #555; padding-bottom: 8px; }
-.calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; background: #0a0a0a; color: #444; }
-.calendar-day.has-session { background: #ef4444; color: #fff; font-weight: 700; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3); }
-.calendar-day.today { border: 2px solid #fff; color: #fff; }
+function renderExerciseCarousel(seance) {
+    const cont = document.getElementById('exercise-carousel-items'); cont.innerHTML = '';
+    seance.exercises.forEach((ex, i) => {
+        const item = document.createElement('div'); item.className = 'carousel-item';
+        item.dataset.index = i; item.draggable = true;
+        if(ex.id === App.currentExerciseId) item.classList.add('active');
+        item.innerHTML = `<div class="carousel-icon"><div class="carousel-icon-img">${MUSCLE_ICONS.default}</div></div><div class="carousel-label">${ex.name}</div>`;
+        item.onclick = () => selectExerciseInDetail(ex.id);
+        item.ondragstart = (e) => { App.dragState.dragSrcEl = item; e.dataTransfer.effectAllowed='move'; item.classList.add('dragging'); };
+        item.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect='move'; return false; };
+        item.ondrop = (e) => { 
+            e.stopPropagation(); item.classList.remove('dragging');
+            if (App.dragState.dragSrcEl !== item) {
+                const oldI = parseInt(App.dragState.dragSrcEl.dataset.index);
+                const newI = parseInt(item.dataset.index);
+                const exs = [...seance.exercises];
+                const [moved] = exs.splice(oldI, 1);
+                exs.splice(newI, 0, moved);
+                Storage.reorderExercises(App.currentSeanceId, exs);
+                renderExerciseCarousel({ ...seance, exercises: exs });
+            }
+            return false;
+        };
+        cont.appendChild(item);
+    });
+    const addDiv = document.createElement('div'); addDiv.className = 'carousel-item';
+    addDiv.innerHTML = `<div class="carousel-add-btn">+</div><div class="carousel-label">Ajouter</div>`;
+    addDiv.onclick = openExerciseModal;
+    cont.appendChild(addDiv);
+}
 
-/* GRAPHIQUE */
-.chart-controls { margin-bottom: 16px; }
-.chart-select { width: 100%; background: #0a0a0a; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 12px; font-size: 15px; margin-bottom: 12px; outline: none; }
-.chart-toggles { display: flex; background: #0a0a0a; padding: 4px; border-radius: 10px; }
-.chart-toggle { flex: 1; background: 0 0; border: none; color: #666; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; transition: 0.2s; }
-.chart-toggle.active { background: #222; color: #fff; }
-.chart-container { height: 180px; width: 100%; position: relative; margin-bottom: 16px; }
-.chart-svg { width: 100%; height: 100%; overflow: visible; }
-.chart-svg circle { transition: r 0.2s, fill 0.2s; cursor: pointer; }
-.chart-svg circle:hover { r: 6; fill: #fff; }
-.chart-stats-summary { display: flex; justify-content: space-between; background: #0a0a0a; padding: 12px; border-radius: 12px; }
-.mini-stat { display: flex; flex-direction: column; align-items: center; flex: 1; }
-.mini-stat span:first-child { font-size: 11px; color: #666; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-.mini-stat-value { font-size: 16px; font-weight: 700; color: #fff; }
+function selectExerciseInDetail(id) {
+    App.currentExerciseId = id;
+    document.getElementById('exercise-detail-content').classList.remove('hidden');
+    document.querySelectorAll('.carousel-item').forEach(el => el.classList.toggle('active', el.dataset.index !== undefined && Storage.getSeance(App.currentSeanceId).exercises[el.dataset.index].id === id));
+    
+    const d = Storage.getExerciseData(App.currentSessionId, id);
+    document.getElementById('exercise-comment-detail').value = d.comment || '';
+    renderSeriesTable(d.series || []);
+    loadHistory();
+    checkPR();
+}
 
-/* LISTE SÉANCES */
-.seances-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 0 20px 20px; }
-.seance-card { background: linear-gradient(145deg, #161616 0%, #1c1c1c 100%); border-radius: 20px; padding: 20px; min-height: 150px; display: flex; flex-direction: column; position: relative; border: 1px solid #2a2a2a; transition: transform 0.2s; }
-.seance-card:active { transform: scale(0.98); }
-.seance-content-wrapper { flex: 1; display:flex; flex-direction:column; justify-content:center; }
-.seance-icon { margin-bottom: 12px; color: #ef4444; }
-.seance-name { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
-.seance-exercises-count { font-size: 13px; color: #666; }
-.card-delete-btn { position: absolute; top: 12px; right: 12px; background: 0 0; border: none; color: #444; padding: 8px; }
+// === GESTION EXERCICES & SUGGESTIONS ===
+function openExerciseModal() {
+    document.getElementById('exercise-modal').classList.add('active');
+    const input = document.getElementById('new-exercise-name');
+    input.value = '';
+    document.getElementById('new-exercise-muscle').value = ''; 
+    document.getElementById('suggestions-container').innerHTML = ''; 
+    setTimeout(() => input.focus(), 100);
+}
 
-/* CARROUSEL */
-.exercise-carousel { width: 100%; overflow-x: auto; background: #000; padding: 20px 0; scrollbar-width: none; }
-.exercise-carousel::-webkit-scrollbar { display: none; }
-.carousel-items { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 16px; padding: 0 20px; align-items: flex-start; }
-.carousel-item { flex-shrink: 0; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; }
-.carousel-icon { width: 64px; height: 64px; border-radius: 20px; background: #111; display: flex; align-items: center; justify-content: center; border: 2px solid transparent; transition: 0.2s; }
-.carousel-item.active .carousel-icon { border-color: #ef4444; background: #1a1a1a; box-shadow: 0 4px 12px rgba(239,68,68,0.2); }
-.carousel-label { font-size: 11px; color: #888; text-align: center; line-height: 1.2; height: 26px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.carousel-item.active .carousel-label { color: #fff; font-weight: 600; }
-.carousel-add-btn { width: 64px; height: 64px; border-radius: 20px; background: #111; border: 2px dashed #333; color: #666; font-size: 24px; display: flex; align-items: center; justify-content: center; }
+function handleInputSuggestions(e) {
+    const val = e.target.value.toLowerCase().trim();
+    const container = document.getElementById('suggestions-container');
+    container.innerHTML = '';
+    
+    if(val.length < 1) { container.classList.add('hidden'); return; }
+    
+    const all = Storage.getAllExercisesFlat();
+    // Unique list based on name
+    const uniqueNames = [...new Set(all.map(e => e.name))].sort();
+    const matches = uniqueNames.filter(n => n.toLowerCase().includes(val));
+    
+    if(matches.length > 0) {
+        container.classList.remove('hidden');
+        matches.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = name;
+            div.onclick = () => {
+                document.getElementById('new-exercise-name').value = name;
+                container.innerHTML = ''; 
+                container.classList.add('hidden');
+            };
+            container.appendChild(div);
+        });
+    } else { 
+        container.classList.add('hidden'); 
+    }
+}
 
-/* UTILITAIRES */
-.empty-message { text-align: center; padding: 80px 20px; color: #555; }
-.hidden { display: none !important; }
+function saveNewExercise() {
+    const name = document.getElementById('new-exercise-name').value.trim();
+    const muscle = document.getElementById('new-exercise-muscle').value; 
+    if(name) { 
+        const ex = Storage.addExercise(App.currentSeanceId, name, muscle || '');
+        document.getElementById('exercise-modal').classList.remove('active');
+        renderExerciseCarousel(Storage.getSeance(App.currentSeanceId));
+        selectExerciseInDetail(ex.id);
+        showNotification('Exercice ajouté', 'success');
+    }
+}
 
-/* TABLES & CONTENU */
-.exercise-detail { padding: 0 20px 20px; }
-.section-label-inline { font-size: 13px; font-weight: 700; color: #555; margin-bottom: 12px; display: block; letter-spacing: 0.5px; }
-.comment-textarea { width: 100%; padding: 16px; background: #111; border: 1px solid #222; border-radius: 16px; color: #fff; margin-bottom: 24px; font-family: inherit; }
-.series-table-container { background: #111; border-radius: 16px; overflow: hidden; margin-bottom: 20px; border: 1px solid #222; }
-.series-table-modern { width: 100%; border-collapse: collapse; }
-.series-table-modern th { padding: 14px 8px; font-size: 11px; color: #666; background: #0f0f0f; font-weight: 600; }
-.series-table-modern td { padding: 10px 4px; text-align: center; border-top: 1px solid #222; }
-.series-table-modern input[type="number"] { width: 100%; max-width: 50px; padding: 8px 0; background: #1a1a1a; border: none; border-radius: 8px; color: #fff; text-align: center; font-weight: 600; }
-.series-table-modern input[type="checkbox"] { width: 22px; height: 22px; accent-color: #ef4444; border-radius: 6px; cursor: pointer; }
-.btn-action { flex: 1; padding: 16px; border: none; border-radius: 16px; font-weight: 600; cursor: pointer; }
-.action-buttons { display: flex; gap: 12px; margin-bottom: 24px; }
-.btn-delete-series { background: #1a1a1a; color: #ef4444; }
-.btn-add-series { background: #ef4444; color: #fff; }
+// === SÉRIES ===
+function renderSeriesTable(series) {
+    const tb = document.getElementById('series-tbody-detail'); tb.innerHTML = '';
+    if(series.length===0) series=[{}];
+    series.forEach((s,i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><input type="checkbox" class="series-select"></td><td>${i+1}</td><td><input type="number" class="reps" value="${s.reps||''}" placeholder="0"></td><td><input type="number" class="kg" value="${s.kg||''}" placeholder="0"></td><td><input type="number" class="repos" value="${(s.repos<10 && s.repos>0)?s.repos*60:(s.repos||'')}" placeholder="s"></td><td><input type="number" class="rir" value="${s.rir||''}" placeholder="-"></td><td><input type="checkbox" class="fait" ${s.fait?'checked':''}></td>`;
+        tr.querySelectorAll('input:not(.series-select)').forEach(i => i.onchange = () => { saveSeries(); checkPR(); });
+        tr.querySelector('.fait').onchange = (e) => { 
+            if(e.target.checked) { 
+                resetRestTimer(); 
+                startRestTimer(); 
+            }
+            saveSeries(); 
+        };
+        tb.appendChild(tr);
+    });
+}
+function saveSeries() {
+    const s = [];
+    document.querySelectorAll('#series-tbody-detail tr').forEach(tr => {
+        s.push({
+            reps: parseInt(tr.querySelector('.reps').value)||0, kg: parseFloat(tr.querySelector('.kg').value)||0,
+            repos: parseInt(tr.querySelector('.repos').value)||0, rir: parseInt(tr.querySelector('.rir').value)||0,
+            fait: tr.querySelector('.fait').checked
+        });
+    });
+    Storage.saveExerciseData(App.currentSessionId, App.currentExerciseId, { comment: document.getElementById('exercise-comment-detail').value, series: s });
+    updateLiveVolume();
+}
 
-/* BADGES EN DIRECT */
-.live-volume-tags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 16px; min-height: 26px; }
-.vol-tag { background: #1a1a1a; color: #ef4444; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #333; animation: popIn 0.3s ease-out; }
+function updateLiveVolume() {
+    const sess = Storage.getSessions().find(s => s.id === App.currentSessionId);
+    const s = Storage.getSeance(App.currentSeanceId);
+    if(!sess || !s) return;
+    
+    const counts = {};
+    if(sess.exercises) {
+        Object.keys(sess.exercises).forEach(exId => {
+            const exObj = s.exercises.find(e => e.id === exId);
+            let muscle = 'Autre';
+            if(exObj && exObj.muscleGroup) muscle = exObj.muscleGroup;
+            else {
+                const found = Storage.getAllExercisesFlat().find(e => e.id === exId);
+                if(found && found.muscleGroup) muscle = found.muscleGroup;
+            }
+            if(!muscle) muscle = 'Autre';
+            
+            const series = sess.exercises[exId].series || [];
+            const doneCount = series.filter(x => x.fait).length;
+            if(doneCount > 0) { counts[muscle] = (counts[muscle] || 0) + doneCount; }
+        });
+    }
+    
+    const cont = document.getElementById('live-session-volume');
+    if(!cont) return;
+    if(Object.keys(counts).length === 0) { cont.innerHTML = ''; return; }
+    
+    let html = '';
+    Object.entries(counts).sort((a,b) => b[1] - a[1]).forEach(([m, c]) => {
+        html += `<span class="vol-tag">${c}x ${m}</span>`;
+    });
+    cont.innerHTML = html;
+}
 
-/* BOUTON FINIR */
-.finish-session-container { padding: 0 20px 40px; }
-.finish-btn { width: 100%; padding: 18px; background: #111; border: 1px solid #333; color: #fff; border-radius: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; transition: 0.3s; }
-.finish-btn.completed-state { background: rgba(34, 197, 94, 0.1); border-color: #22c55e; color: #22c55e; }
+function addSeries() { 
+    const d = Storage.getExerciseData(App.currentSessionId, App.currentExerciseId);
+    const last = (d.series && d.series.length) ? d.series[d.series.length-1] : {};
+    if(!d.series) d.series=[]; d.series.push({...last, fait:false});
+    renderSeriesTable(d.series); saveSeries();
+}
+function deleteSelectedSeries() {
+    const tb = document.getElementById('series-tbody-detail');
+    const keep = [];
+    const d = Storage.getExerciseData(App.currentSessionId, App.currentExerciseId);
+    tb.querySelectorAll('tr').forEach((tr, i) => { if(!tr.querySelector('.series-select').checked && d.series[i]) keep.push(d.series[i]); });
+    d.series = keep;
+    Storage.saveExerciseData(App.currentSessionId, App.currentExerciseId, d); renderSeriesTable(keep);
+    updateLiveVolume();
+}
+function checkPR() {
+    let isPR = false;
+    document.querySelectorAll('#series-tbody-detail tr').forEach(tr => {
+        const kg = parseFloat(tr.querySelector('.kg').value);
+        if(kg > 0 && Storage.checkIsPR(App.currentExerciseId, kg)) { isPR = true; tr.querySelector('.kg').style.color='#FFD700'; }
+        else tr.querySelector('.kg').style.color='';
+    });
+    document.getElementById('pr-badge').className = isPR ? 'pr-badge' : 'pr-badge hidden';
+}
 
-/* HISTORIQUE DÉTAILLÉ */
-.history-timeline { display: flex; flex-direction: column; gap: 12px; }
-.history-date-item { background: #111; border-radius: 16px; padding: 16px; border: 1px solid #222; }
-.history-date-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #ef4444; margin-bottom: 12px; text-transform: uppercase; }
-.history-comment { background: #222; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #bbb; font-style: italic; margin-bottom: 8px; border-left: 3px solid #ef4444; }
-.history-series-grid { display: flex; flex-direction: column; gap: 6px; }
-.history-series-row { display: flex; justify-content: space-between; align-items: center; background: #0a0a0a; padding: 8px 12px; border-radius: 8px; font-size: 13px; border: 1px solid #1a1a1a; }
-.h-num { color: #555; font-size: 11px; width: 25px; font-weight: 700; }
-.h-data { flex: 1; display: flex; justify-content: space-between; align-items: center; }
-.h-main { color: #fff; font-weight: 700; }
-.h-extra { color: #888; font-size: 11px; background: #1a1a1a; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+// === HISTORIQUE DÉTAILLÉ ===
+function loadHistory() {
+    const c = document.getElementById('history-timeline'); c.innerHTML='';
+    const h = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
+    if(h.length===0) { c.innerHTML='<p class="empty-history">Pas d\'historique</p>'; return; }
+    h.forEach(x => {
+        const d = document.createElement('div'); d.className='history-date-item';
+        let commentHTML = '';
+        if(x.data.comment && x.data.comment.trim() !== '') commentHTML = `<div class="history-comment">📝 ${x.data.comment}</div>`;
+        let seriesHTML = `<div class="history-series-grid">`;
+        x.data.series.forEach((s,i) => {
+            let extras = [];
+            if(s.repos) extras.push(`⏱️${(s.repos<10 && s.repos>0)?s.repos*60:s.repos}s`);
+            if(s.rir) extras.push(`RIR:${s.rir}`);
+            let extraHTML = extras.length > 0 ? `<span class="h-extra">${extras.join(' | ')}</span>` : '';
+            seriesHTML += `<div class="history-series-row"><span class="h-num">#${i+1}</span><div class="h-data"><span class="h-main">${s.reps} x ${s.kg}kg</span>${extraHTML}</div></div>`;
+        });
+        seriesHTML += '</div>';
+        d.innerHTML = `<div class="history-date-label">${new Date(x.date).toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'})}</div>${commentHTML}${seriesHTML}`;
+        c.appendChild(d);
+    });
+}
 
-/* NAV */
-.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.95); backdrop-filter: blur(10px); display: flex; justify-content: space-around; padding: 12px 12px 24px; border-top: 1px solid #1a1a1a; z-index: 100; }
-.nav-btn-modern { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; background: 0 0; border: none; color: #555; }
-.nav-btn-modern.active { color: #ef4444; }
-.nav-btn-modern.active svg { stroke: #ef4444; }
+// === TIMERS LOGIC ===
 
-/* MODALS */
-.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 2000; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(5px); }
-.modal-overlay.active { display: flex; }
-.modal-modern { background: #161616; border-radius: 24px; padding: 32px; width: 100%; max-width: 340px; border: 1px solid #2a2a2a; }
-.modal-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; color: #fff; text-align: center; }
-.input-modern { width: 100%; padding: 16px; background: #0a0a0a; border: 1px solid #333; border-radius: 12px; color: #fff; font-size: 16px; margin-bottom: 20px; outline: none; }
-.input-modern:focus { border-color: #ef4444; }
-.modal-actions-modern { display: flex; gap: 12px; }
-.btn-modal-secondary { flex: 1; padding: 16px; border: none; border-radius: 12px; font-weight: 600; background: #2a2a2a; color: #fff; }
-.btn-modal-primary { flex: 1; padding: 16px; border: none; border-radius: 12px; font-weight: 600; background: #ef4444; color: #fff; }
+// Timer 1: Repos (Bouton Rouge)
+function handleRestTimerClick() {
+    if(App.timerState === 'running') pauseRestTimer();
+    else if (App.timerState === 'paused') resetRestTimer();
+    else startRestTimer();
+}
+function startRestTimer() {
+    document.getElementById('start-timer-btn').classList.add('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = '';
+    App.timerState = 'running';
+    App.timerStartTime = Date.now() - App.timerElapsed;
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; updateRestTimerDisplay(); }, 1000);
+}
+function pauseRestTimer() {
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    App.timerState = 'paused';
+    document.getElementById('start-timer-btn').classList.remove('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
+}
+function resetRestTimer() {
+    if(App.timerInterval) clearInterval(App.timerInterval);
+    App.timerInterval = null; App.timerElapsed = 0; App.timerState = 'stopped';
+    document.getElementById('start-timer-btn').classList.remove('timer-active');
+    document.getElementById('start-timer-btn').style.borderColor = '';
+    document.getElementById('start-timer-btn').innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+}
+function stopRestTimer(force = false) { if(force) resetRestTimer(); }
+function updateRestTimerDisplay() {
+    const m = Math.floor(App.timerElapsed/60000); const s = Math.floor((App.timerElapsed%60000)/1000);
+    document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
+}
 
-.pr-badge { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 8px; text-transform: uppercase; }
-.options-menu { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; align-items: flex-end; opacity: 0; transition: 0.3s; pointer-events: none; }
-.options-menu.active { opacity: 1; pointer-events: auto; }
-.options-menu-content { width: 100%; background: #161616; border-radius: 24px 24px 0 0; padding: 24px; transform: translateY(100%); transition: 0.3s; border-top: 1px solid #333; }
-.options-menu.active .options-menu-content { transform: translateY(0); }
-.option-item { width: 100%; padding: 16px; background: #222; border: none; border-radius: 12px; color: #fff; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-.notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px); background: #161616; color: #fff; padding: 16px 24px; border-radius: 50px; z-index: 4000; border: 1px solid #333; opacity: 0; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; display:flex; align-items:center; gap:8px; white-space:nowrap; }
-.notification.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.notification-success { border-color: #22c55e; color: #22c55e; }
-.notification-error { border-color: #ef4444; color: #ef4444; }
+// Timer 2: Session (Global)
+function startSessionTimer() {
+    const display = document.getElementById('session-total-timer');
+    if(!display) return;
+    
+    // Si un chrono est déjà en cours on ne le reset pas à 0
+    if(!App.sessionStartTime) App.sessionStartTime = Date.now(); 
+    
+    if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
+    App.sessionTimerInterval = setInterval(() => {
+        const diff = Date.now() - App.sessionStartTime;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        display.textContent = (h > 0 ? h + ':' : '') + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+    }, 1000);
+}
+function stopSessionTimer() { 
+    if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
+    App.sessionStartTime = null; // Remet à zéro pour la prochaine séance
+    const display = document.getElementById('session-total-timer');
+    if(display) display.textContent = "00:00";
+}
+
+function showOptionsMenu() {
+    const m = document.createElement('div'); m.className='options-menu active';
+    m.innerHTML = `<div class="options-menu-content"><div style="text-align:center;color:#666;font-size:12px;margin-bottom:10px">DÉPLACER</div><div style="display:flex;gap:10px;margin-bottom:10px"><button id="mv-l" class="option-item">⬅️ Gauche</button><button id="mv-r" class="option-item">Droite ➡️</button></div><button id="del-ex" class="option-item" style="color:#ef4444">Supprimer</button><button id="canc" class="option-item">Annuler</button></div>`;
+    document.body.appendChild(m);
+    m.onclick = (e) => {
+        const s = Storage.getSeance(App.currentSeanceId); const idx = s.exercises.findIndex(e=>e.id===App.currentExerciseId);
+        const exs = [...s.exercises];
+        if(e.target.id==='mv-l' && idx>0) { const t=exs[idx]; exs[idx]=exs[idx-1]; exs[idx-1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
+        if(e.target.id==='mv-r' && idx<exs.length-1) { const t=exs[idx]; exs[idx]=exs[idx+1]; exs[idx+1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
+        if(e.target.id==='del-ex' && confirm('Supprimer ?')) { Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); openSeanceDetail(App.currentSeanceId); }
+        if(e.target.tagName==='BUTTON' || e.target===m) m.remove();
+    };
+}
+
+// === IMPORT/EXPORT ===
+function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Storage.exportData()], {type:'application/json'})); a.download = `sauvegarde_malzou_${new Date().toISOString().split('T')[0]}.json`; a.click(); }
+function importDataFile(e) { const r = new FileReader(); r.onload = (evt) => { if(Storage.importData(evt.target.result)) { showNotification('Succès !', 'success'); setTimeout(()=>location.reload(), 1000); } else showNotification('Erreur fichier', 'error'); }; if(e.target.files[0]) r.readAsText(e.target.files[0]); }
+function showNotification(m, t='info') { const n = document.createElement('div'); n.className=`notification notification-${t}`; n.textContent=m; document.body.appendChild(n); setTimeout(()=>n.classList.add('show'),10); setTimeout(()=>{n.classList.remove('show'); setTimeout(()=>n.remove(),300)}, 3000); }
+
+// === ANALYSE & GRAPHIQUES ===
+function initHistoriqueView() { document.getElementById('prev-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()-1); renderCalendar();}); document.getElementById('next-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()+1); renderCalendar();}); }
+
+function refreshHistoriqueView() {
+    document.getElementById('total-sessions').textContent = Storage.getTotalSessionsCount();
+    renderCalendar();
+    
+    updateMuscleVolumeChart(); // Calcul du volume via les template (Option 1)
+
+    const sel = document.getElementById('chart-exercise-select'); sel.innerHTML = '<option value="" disabled selected>Choisir...</option>';
+    [...new Set(Storage.getAllExercisesFlat().map(e=>e.name))].sort().forEach(n => {
+        const ex = Storage.getAllExercisesFlat().find(e=>e.name===n);
+        const opt = document.createElement('option'); opt.value = ex.id; opt.textContent = n; sel.appendChild(opt);
+    });
+    sel.onchange = (e) => { App.statsState.selectedExerciseId = e.target.value; updateChart(); };
+}
+
+// LOGIQUE OPTION 1 : VOLUME THÉORIQUE DU PROGRAMME ACTUEL
+function updateMuscleVolumeChart() {
+    const seances = Storage.getSeances();
+    const muscleCounts = {};
+
+    seances.forEach(seance => {
+        if (!seance.exercises) return;
+        
+        seance.exercises.forEach(ex => {
+            let muscle = ex.muscleGroup || 'Autre';
+            
+            // 1. Cherche le nb de séries dans le dernier historique de cet exo
+            const history = Storage.getGlobalExerciseHistory(ex.id);
+            let nbSeries = 0;
+            
+            if (history && history.length > 0) {
+                history.sort((a, b) => new Date(a.date) - new Date(b.date));
+                const lastData = history[history.length - 1].data;
+                if (lastData && lastData.series) {
+                    nbSeries = lastData.series.length;
+                }
+            } else {
+                // 2. Si pas d'historique, cherche dans la session brouillon actuelle
+                const sessions = Storage.getSessions();
+                const draft = sessions.slice().reverse().find(s => s.seanceId === seance.id && s.exercises && s.exercises[ex.id]);
+                if (draft && draft.exercises[ex.id].series) {
+                    nbSeries = draft.exercises[ex.id].series.length;
+                }
+            }
+
+            if (nbSeries > 0) {
+                muscleCounts[muscle] = (muscleCounts[muscle] || 0) + nbSeries;
+            }
+        });
+    });
+
+    const cont = document.getElementById('muscle-volume-container');
+    cont.innerHTML = '';
+    const sorted = Object.entries(muscleCounts).sort((a,b) => b[1] - a[1]);
+    
+    if(sorted.length === 0) {
+        cont.innerHTML = '<div style="color:#666; font-size:13px; text-align:center;">Aucun volume paramétré</div>';
+        return;
+    }
+
+    const maxSets = sorted[0][1];
+    sorted.forEach(([m, c]) => {
+        const percent = Math.max(5, (c / maxSets) * 100);
+        cont.innerHTML += `
+            <div class="muscle-row">
+                <div class="muscle-name">${m}</div>
+                <div class="muscle-bar-wrapper">
+                    <div class="muscle-bar-fill" style="width: ${percent}%"></div>
+                </div>
+                <div class="muscle-count">${c}</div>
+            </div>
+        `;
+    });
+}
+
+function updateChart() {
+    const hist = Storage.getGlobalExerciseHistory(App.statsState.selectedExerciseId);
+    const cont = document.getElementById('performance-chart');
+    if(hist.length < 2) { cont.innerHTML = '<div class="empty-chart-msg" style="text-align:center;color:#666;padding:20px;">Pas assez de données</div>'; return; }
+    
+    const vals = hist.map(h => {
+        const seriesVals = h.data.series.map(s=>parseFloat(s.kg)||0);
+        if (seriesVals.length === 0) return 0;
+        return App.statsState.metric==='weight' ? Math.max(...seriesVals) : h.data.series.reduce((a,b)=>a+(parseFloat(b.kg||0)*parseInt(b.reps||0)),0);
+    });
+    const max = Math.max(...vals); const min = Math.min(...vals); const range = (max - min) === 0 ? 10 : (max - min);
+    let path = "";
+    vals.forEach((v, i) => {
+        const x = 5 + (i/(vals.length-1))*90;
+        const y = 100 - 5 - ((v-min)/range)*90;
+        path += `${x},${y} `;
+    });
+    cont.innerHTML = `<svg viewBox="0 0 100 100" class="chart-svg"><polyline fill="none" stroke="#ef4444" stroke-width="2" points="${path}" vector-effect="non-scaling-stroke"/></svg>`;
+    document.getElementById('chart-stats-summary').classList.remove('hidden');
+    document.getElementById('stat-max-val').textContent = max;
+    document.getElementById('stat-last-val').textContent = vals[vals.length-1];
+    
+    const prev = vals[0]; const last = vals[vals.length-1];
+    let pText = "0%"; let pColor = "#888";
+    if (prev === 0) { if (last > 0) { pText = "Nouveau"; pColor = "#22c55e"; } } 
+    else { const p = ((last - prev) / prev) * 100; pText = (p>0?'+':'')+p.toFixed(1)+'%'; pColor = p>=0?'#22c55e':'#ef4444'; }
+    const pEl = document.getElementById('stat-progression'); pEl.textContent = pText; pEl.style.color = pColor;
+}
+
+function renderCalendar() {
+    const m = App.currentCalendarMonth;
+    document.getElementById('current-month').textContent = m.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+    const dates = Storage.getSessionDates();
+    const cal = document.getElementById('calendar'); cal.innerHTML = '';
+    ['L','M','M','J','V','S','D'].forEach(d => cal.innerHTML += `<div class="calendar-day-header">${d}</div>`);
+    const first = new Date(m.getFullYear(), m.getMonth(), 1);
+    const days = new Date(m.getFullYear(), m.getMonth()+1, 0).getDate();
+    let start = first.getDay() - 1; if(start === -1) start = 6;
+    for(let i=0; i<start; i++) cal.innerHTML += `<div class="calendar-day"></div>`;
+    const today = new Date().toISOString().split('T')[0];
+    for(let i=1; i<=days; i++) {
+        const dStr = `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        const cls = `calendar-day ${dates.includes(dStr)?'has-session':''} ${dStr===today?'today':''}`;
+        cal.innerHTML += `<div class="${cls}">${i}</div>`;
+    }
+}
+
+function initPerformanceView() {
+    document.querySelectorAll('.chart-toggle').forEach(t => t.addEventListener('click', ()=>{
+        document.querySelectorAll('.chart-toggle').forEach(x=>x.classList.remove('active'));
+        t.classList.add('active');
+        App.statsState.metric = t.dataset.metric;
+        updateChart();
+    }));
+}
