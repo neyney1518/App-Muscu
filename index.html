@@ -13,8 +13,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="icon" type="image/png" href="icon-192_old.png">
-    <link rel="apple-touch-icon" href="icon-192_old.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
     
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -23,7 +23,7 @@
     <div id="seances-list-view" class="view active">
         <header class="main-header">
             <div class="header-title-group">
-                <img src="icon-192_old.png" alt="Logo" class="header-logo">
+                <img src="icon-192.png" alt="Logo" class="header-logo">
                 <h1 class="main-title">Malzou-training</h1>
             </div>
             <div class="header-actions">
@@ -63,13 +63,25 @@
             </div>
             <div class="history-section"><label class="section-label-inline">HISTORIQUE</label><div id="history-timeline" class="history-timeline"></div></div>
         </div>
-        <div class="finish-session-container"><button id="finish-session-btn" class="finish-btn">Terminer la séance</button></div>
+        
+        <div class="finish-session-container">
+            <div id="live-session-volume" class="live-volume-tags"></div>
+            <button id="finish-session-btn" class="finish-btn">Terminer la séance</button>
+        </div>
     </div>
 
     <div id="historique-view" class="view">
         <header class="main-header"><h1 class="main-title">Analyse</h1></header>
         <div class="content-container">
+            
             <div class="dashboard-card"><div class="card-header-icon">🔥</div><span class="stat-value-modern" id="total-sessions">0</span><span class="stat-label-modern">Séances terminées</span></div>
+            
+            <div class="dashboard-card">
+                <h3 class="card-title">Volume Musculaire</h3>
+                <p style="font-size:12px; color:#666; margin-bottom:16px;">Volume paramétré dans vos séances</p>
+                <div id="muscle-volume-container"></div>
+            </div>
+
             <div class="dashboard-card">
                 <h3 class="card-title">Calendrier</h3>
                 <div class="calendar-header"><button id="prev-month" class="calendar-nav-btn">‹</button><span id="current-month"></span><button id="next-month" class="calendar-nav-btn">›</button></div>
@@ -102,7 +114,20 @@
                 <div id="suggestions-container" class="suggestions-dropdown hidden"></div>
             </div>
             
-            <input type="text" id="new-exercise-muscle" class="input-modern" placeholder="Groupe (ex: Pectoraux)">
+            <select id="new-exercise-muscle" class="input-modern">
+                <option value="" disabled selected>Groupe musculaire</option>
+                <option value="Pectoraux">Pectoraux</option>
+                <option value="Dos">Dos</option>
+                <option value="Épaules">Épaules</option>
+                <option value="Biceps">Biceps</option>
+                <option value="Triceps">Triceps</option>
+                <option value="Quadriceps">Quadriceps</option>
+                <option value="Ischio-jambiers">Ischio-jambiers</option>
+                <option value="Mollets">Mollets</option>
+                <option value="Abdos">Abdos</option>
+                <option value="Autre">Autre</option>
+            </select>
+
             <div class="modal-actions-modern">
                 <button id="cancel-exercise-btn" class="btn-modal-secondary">Annuler</button>
                 <button id="save-exercise-btn" class="btn-modal-primary">Créer</button>
@@ -117,4 +142,3 @@
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 </html>
-
