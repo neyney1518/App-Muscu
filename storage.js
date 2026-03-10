@@ -1,254 +1,126 @@
 const Storage = {
-    KEYS: {
-        SEANCES: 'musculation_seances',
-        SESSIONS: 'musculation_sessions'
-    },
+    KEYS: { SEANCES: 'musculation_seances', SESSIONS: 'musculation_sessions' },
 
-    // --- SÉANCES ---
-    getSeances() {
-        return JSON.parse(localStorage.getItem(this.KEYS.SEANCES) || '[]');
-    },
-
-    saveSeances(seances) {
-        localStorage.setItem(this.KEYS.SEANCES, JSON.stringify(seances));
-    },
+    getSeances() { return JSON.parse(localStorage.getItem(this.KEYS.SEANCES) || '[]'); },
+    saveSeances(s) { localStorage.setItem(this.KEYS.SEANCES, JSON.stringify(s)); },
+    getSessions() { return JSON.parse(localStorage.getItem(this.KEYS.SESSIONS) || '[]'); },
+    saveSessions(s) { localStorage.setItem(this.KEYS.SESSIONS, JSON.stringify(s)); },
 
     addSeance(name) {
-        const seances = this.getSeances();
-        const newSeance = {
-            id: Date.now().toString(),
-            name: name,
-            exercises: [],
-            createdAt: new Date().toISOString()
-        };
-        seances.push(newSeance);
-        this.saveSeances(seances);
-        return newSeance;
+        const s = this.getSeances();
+        s.push({ id: Date.now().toString(), name, exercises: [], createdAt: new Date().toISOString() });
+        this.saveSeances(s);
     },
+    getSeance(id) { return this.getSeances().find(s => s.id === id); },
+    deleteSeance(id) { this.saveSeances(this.getSeances().filter(s => s.id !== id)); },
 
-    getSeance(seanceId) {
-        return this.getSeances().find(s => s.id === seanceId);
-    },
-
-    deleteSeance(seanceId) {
-        let seances = this.getSeances();
-        seances = seances.filter(s => s.id !== seanceId);
-        this.saveSeances(seances);
-    },
-
-    // --- EXERCICES (RÉUTILISATION CORRIGÉE) ---
     addExercise(seanceId, name, muscleGroup = '') {
         const seances = this.getSeances();
         const seance = seances.find(s => s.id === seanceId);
+        if (!seance) return null;
+
+        const cleanInputName = name.trim().toLowerCase();
+        const allExercises = this.getAllExercisesFlat();
+        const existingExercise = allExercises.find(e => e.name.trim().toLowerCase() === cleanInputName);
         
-        if (seance) {
-            // 1. Nettoyage de la saisie utilisateur (minuscules + sans espaces superflus)
-            const cleanInputName = name.trim().toLowerCase();
-            
-            // 2. Récupérer tous les exercices existants dans la base
-            const allExercises = this.getAllExercisesFlat();
-            
-            // 3. Chercher une correspondance exacte (insensible à la casse)
-            const existingExercise = allExercises.find(e => e.name.trim().toLowerCase() === cleanInputName);
-            
-            // 4. LIAISON DE L'HISTORIQUE :
-            // Si l'exo existe déjà, on reprend strictement son ID
-            const newId = existingExercise ? existingExercise.id : Date.now().toString();
-            
-            // On reprend son nom "propre" d'origine (ex: "Dips" au lieu de "dips")
-            const finalName = existingExercise ? existingExercise.name : name.trim();
-            
-            // On reprend son groupe musculaire s'il n'est pas reprécisé, sinon on met "Autre"
-            const finalMuscle = muscleGroup || (existingExercise ? existingExercise.muscleGroup : 'Autre');
+        const newId = existingExercise ? existingExercise.id : Date.now().toString();
+        const finalName = existingExercise ? existingExercise.name : name.trim();
+        const finalMuscle = muscleGroup.trim() || (existingExercise ? existingExercise.muscleGroup : 'Autre');
 
-            const newExercise = {
-                id: newId,
-                name: finalName,
-                muscleGroup: finalMuscle
-            };
-            
-            seance.exercises.push(newExercise);
-            this.saveSeances(seances);
-            return newExercise;
-        }
-        return null;
+        const newExercise = { id: newId, name: finalName, muscleGroup: finalMuscle };
+        seance.exercises.push(newExercise);
+        this.saveSeances(seances);
+        return newExercise;
     },
 
-    deleteExercise(seanceId, exerciseId) {
+    // --- NOUVEAU : Modifier un exercice existant partout ---
+    updateExercise(exerciseId, newName, newMuscleGroup) {
         const seances = this.getSeances();
-        const seance = seances.find(s => s.id === seanceId);
-        if (seance && seance.exercises) {
-            seance.exercises = seance.exercises.filter(e => e.id !== exerciseId);
-            this.saveSeances(seances);
-        }
-    },
-
-    reorderExercises(seanceId, newOrder) {
-        const seances = this.getSeances();
-        const seance = seances.find(s => s.id === seanceId);
-        if (seance) {
-            seance.exercises = newOrder;
-            this.saveSeances(seances);
-        }
-    },
-
-    getAllExercisesFlat() {
-        const seances = this.getSeances();
-        const all = [];
-        const seenIds = new Set();
+        let updated = false;
+        
         seances.forEach(s => {
             if (s.exercises) {
                 s.exercises.forEach(ex => {
-                    if (!seenIds.has(ex.id)) {
-                        seenIds.add(ex.id);
-                        all.push(ex);
+                    if (ex.id === exerciseId) {
+                        ex.name = newName.trim();
+                        ex.muscleGroup = newMuscleGroup.trim() || 'Autre';
+                        updated = true;
                     }
                 });
             }
         });
+        
+        if (updated) this.saveSeances(seances);
+        return updated;
+    },
+
+    // --- NOUVEAU : Récupérer tous les groupes musculaires uniques ---
+    getAllMuscleGroups() {
+        const defaults = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Quadriceps", "Ischio-jambiers", "Mollets", "Abdos"];
+        const all = this.getAllExercisesFlat();
+        const used = all.map(e => e.muscleGroup).filter(m => m && m.trim() !== '' && m !== 'Autre');
+        
+        // Combine par défaut + personnalisés, retire les doublons et trie
+        return [...new Set([...defaults, ...used])].sort();
+    },
+
+    deleteExercise(seanceId, exerciseId) {
+        const s = this.getSeances();
+        const seance = s.find(x => x.id === sId);
+        if (seance) { seance.exercises = seance.exercises.filter(e => e.id !== exerciseId); this.saveSeances(s); }
+    },
+    reorderExercises(sId, order) {
+        const s = this.getSeances();
+        const seance = s.find(x => x.id === sId);
+        if (seance) { seance.exercises = order; this.saveSeances(s); }
+    },
+    getAllExercisesFlat() {
+        const all = []; const ids = new Set();
+        this.getSeances().forEach(s => s.exercises.forEach(e => {
+            if (!ids.has(e.id)) { ids.add(e.id); all.push(e); }
+        }));
         return all;
     },
 
-    // --- SESSIONS (SÉANCES RÉALISÉES) ---
-    getSessions() {
-        return JSON.parse(localStorage.getItem(this.KEYS.SESSIONS) || '[]');
+    getTodaySession(sId) {
+        const s = this.getSessions();
+        const date = new Date().toISOString().split('T')[0];
+        let sess = s.find(x => x.seanceId === sId && x.date === date);
+        if (!sess) { sess = { id: Date.now().toString(), seanceId: sId, date, exercises: {}, completed: false }; s.push(sess); this.saveSessions(s); }
+        return sess;
     },
-
-    saveSessions(sessions) {
-        localStorage.setItem(this.KEYS.SESSIONS, JSON.stringify(sessions));
-    },
-
-    getTodaySession(seanceId) {
-        const sessions = this.getSessions();
-        const today = new Date().toISOString().split('T')[0];
-        let session = sessions.find(s => s.seanceId === seanceId && s.date === today);
-        
-        if (!session) {
-            session = {
-                id: Date.now().toString(),
-                seanceId: seanceId,
-                date: today,
-                exercises: {},
-                completed: false
-            };
-            sessions.push(session);
-            this.saveSessions(sessions);
-        }
-        return session;
-    },
-
-    completeSession(sessionId) {
-        const sessions = this.getSessions();
-        const session = sessions.find(s => s.id === sessionId);
-        if (session) {
-            if (session.completed !== true) {
-                session.completed = true;
-                // La date devient officiellement celle de la validation
-                session.date = new Date().toISOString().split('T')[0]; 
-            }
-            this.saveSessions(sessions);
-            return session;
-        }
+    completeSession(id) {
+        const s = this.getSessions();
+        const sess = s.find(x => x.id === id);
+        if (sess && !sess.completed) { sess.completed = true; sess.date = new Date().toISOString().split('T')[0]; this.saveSessions(s); return sess; }
         return null;
     },
-
-    saveExerciseData(sessionId, exerciseId, data) {
-        const sessions = this.getSessions();
-        const session = sessions.find(s => s.id === sessionId);
-        if (session) {
-            if (!session.exercises) session.exercises = {};
-            session.exercises[exerciseId] = data;
-            this.saveSessions(sessions);
-        }
+    saveExerciseData(sId, exId, d) {
+        const s = this.getSessions();
+        const sess = s.find(x => x.id === sId);
+        if (sess) { if(!sess.exercises) sess.exercises={}; sess.exercises[exId] = d; this.saveSessions(s); }
     },
-
-    getExerciseData(sessionId, exerciseId) {
-        const session = this.getSessions().find(s => s.id === sessionId);
-        if (session && session.exercises && session.exercises[exerciseId]) {
-            return session.exercises[exerciseId];
-        }
-        return { comment: '', series: [] };
+    getExerciseData(sId, exId) {
+        const sess = this.getSessions().find(x => x.id === sId);
+        return (sess && sess.exercises && sess.exercises[exId]) ? sess.exercises[exId] : { comment: '', series: [] };
     },
-
-    // --- HISTORIQUE & STATS ---
-    
-    // Récupère tout l'historique global d'un exercice (par ID unique)
-    getGlobalExerciseHistory(exerciseId) {
-        const sessions = this.getSessions();
-        const history = [];
-        
-        sessions.forEach(session => {
-            if (session.completed === false) return; // On ignore les séances non finies
-            if (session.exercises && session.exercises[exerciseId]) {
-                history.push({ date: session.date, data: session.exercises[exerciseId] });
+    getGlobalExerciseHistory(exId) {
+        const hist = [];
+        this.getSessions().forEach(s => {
+            if (s.completed !== false && s.exercises && s.exercises[exId]) {
+                hist.push({ date: s.date, data: s.exercises[exId] });
             }
         });
-        
-        return history.filter(h => h.data.series && h.data.series.length > 0);
+        return hist.filter(h => h.data.series && h.data.series.length > 0);
     },
-
-    // Récupère l'historique pour l'affichage dans la séance (exclut aujourd'hui)
-    getExerciseHistory(seanceId, exerciseId) {
+    getExerciseHistory(sId, exId) {
         const today = new Date().toISOString().split('T')[0];
-        return this.getGlobalExerciseHistory(exerciseId)
-            .filter(h => h.date !== today)
-            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Du plus récent au plus ancien
+        return this.getGlobalExerciseHistory(exId).filter(h => h.date !== today).sort((a, b) => new Date(b.date) - new Date(a.date));
     },
-
-    getTotalSessionsCount() {
-        return this.getSessions().filter(s => s.completed === true || s.completed === undefined).length;
-    },
-
-    getSessionDates() {
-        return this.getSessions()
-            .filter(s => s.completed === true || s.completed === undefined)
-            .map(s => s.date);
-    },
-
-    // --- PREMIUM (Export/Import/PR) ---
-    exportData() {
-        const data = {
-            seances: this.getSeances(),
-            sessions: this.getSessions(),
-            version: '1.5',
-            date: new Date().toISOString()
-        };
-        return JSON.stringify(data);
-    },
-
-    importData(jsonString) {
-        try {
-            const data = JSON.parse(jsonString);
-            if (data.seances && data.sessions) {
-                this.saveSeances(data.seances);
-                this.saveSessions(data.sessions);
-                return true;
-            }
-            return false;
-        } catch (e) {
-            console.error("Erreur import", e);
-            return false;
-        }
-    },
-
-    checkIsPR(exerciseId, weight) {
-        if (!weight || weight <= 0) return false;
-        const history = this.getGlobalExerciseHistory(exerciseId);
-        if (history.length === 0) return true; // Premier record
-        
-        let max = 0;
-        history.forEach(h => {
-            h.data.series.forEach(s => {
-                if (s.kg && parseFloat(s.kg) > max) {
-                    max = parseFloat(s.kg);
-                }
-            });
-        });
-        return parseFloat(weight) > max;
-    }
+    getTotalSessionsCount() { return this.getSessions().filter(s => s.completed !== false).length; },
+    getSessionDates() { return this.getSessions().filter(s => s.completed !== false).map(s => s.date); },
+    exportData() { return JSON.stringify({ seances: this.getSeances(), sessions: this.getSessions(), v: '1.6' }); },
+    importData(json) { try { const d = JSON.parse(json); if (d.seances && d.sessions) { this.saveSeances(d.seances); this.saveSessions(d.sessions); return true; } } catch (e) {} return false; },
+    checkIsPR(exId, kg) { if (!kg || kg <= 0) return false; const h = this.getGlobalExerciseHistory(exId); if (h.length === 0) return true; let max = 0; h.forEach(x => x.data.series.forEach(s => { if(s.kg > max) max = parseFloat(s.kg); })); return parseFloat(kg) > max; }
 };
-
-// Export pour le navigateur
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = Storage;
-}
+if (typeof module !== 'undefined') module.exports = Storage;
