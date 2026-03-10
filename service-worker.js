@@ -1,5 +1,5 @@
-// Service Worker - VERSION 10 (Force la mise à jour cache)
-const CACHE_NAME = 'musculation-v10';
+// Service Worker - VERSION 12 (Mise à jour majeure + nouveau logo)
+const CACHE_NAME = 'musculation-v12';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -12,49 +12,19 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Force l'installation immédiate
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
-  );
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName); // Supprime les anciens caches
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim(); // Prend le contrôle immédiatement
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => {
+      if (k !== CACHE_NAME) return caches.delete(k);
+  }))));
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request).then(response => {
-          // On ne met en cache que les requêtes valides
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseToCache);
-          });
-          return response;
-        });
-      })
-  );
+  event.respondWith(caches.match(event.request).then(res => res || fetch(event.request).then(r => {
+      return caches.open(CACHE_NAME).then(c => { c.put(event.request, r.clone()); return r; });
+  })));
 });
-
