@@ -1,13 +1,8 @@
 const App = {
     currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
     currentCalendarMonth: new Date(),
-    
-    // Timer Repos (Bouton rouge)
-    timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', // stopped, running, paused
-    
-    // Timer Session (Global en haut)
+    timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', 
     sessionTimerInterval: null, sessionStartTime: null,
-
     statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
 };
 const MUSCLE_ICONS = { default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>` };
@@ -16,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initNavigation(); initSeancesListView(); initSeanceDetailView(); initHistoriqueView(); initPerformanceView(); renderSeancesList();
 });
 
-// === NAVIGATION ===
+// NAVIGATION
 function initNavigation() {
     document.querySelectorAll('.nav-btn-modern').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -34,7 +29,7 @@ function switchToView(id) {
     if (id === 'seances-list-view') renderSeancesList();
 }
 
-// === LISTE SÉANCES ===
+// LISTE SÉANCES
 function initSeancesListView() {
     document.getElementById('add-seance-header-btn').addEventListener('click', openSeanceModal);
     document.getElementById('cancel-seance-btn').addEventListener('click', closeSeanceModal);
@@ -62,7 +57,7 @@ function openSeanceModal() { document.getElementById('seance-modal').classList.a
 function closeSeanceModal() { document.getElementById('seance-modal').classList.remove('active'); }
 function saveNewSeance() { const n = document.getElementById('new-seance-name').value.trim(); if(n) { Storage.addSeance(n); closeSeanceModal(); renderSeancesList(); } }
 
-// === DÉTAIL SÉANCE ===
+// DÉTAIL SÉANCE
 function openSeanceDetail(id) {
     App.currentSeanceId = id;
     const s = Storage.getSeance(id);
@@ -75,7 +70,6 @@ function openSeanceDetail(id) {
     btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
     btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn";
     
-    // Démarrage des chronos
     startSessionTimer(); 
     resetRestTimer();
     updateLiveVolume();
@@ -86,22 +80,24 @@ function openSeanceDetail(id) {
 }
 
 function initSeanceDetailView() {
-    document.getElementById('back-to-list').addEventListener('click', () => { 
-        stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); 
-    });
+    document.getElementById('back-to-list').addEventListener('click', () => { stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); });
+    
+    // Nouveaux exos
     document.getElementById('cancel-exercise-btn').addEventListener('click', () => document.getElementById('exercise-modal').classList.remove('active'));
     document.getElementById('save-exercise-btn').addEventListener('click', saveNewExercise);
+    document.getElementById('new-exercise-name').addEventListener('input', handleInputSuggestions);
+    
+    // Edition exos
+    document.getElementById('cancel-edit-btn').addEventListener('click', () => document.getElementById('edit-exercise-modal').classList.remove('active'));
+    document.getElementById('save-edit-btn').addEventListener('click', saveEditedExercise);
+
     document.getElementById('add-series-detail-btn').addEventListener('click', addSeries);
     document.querySelector('.btn-delete-series').addEventListener('click', deleteSelectedSeries);
-    
     document.getElementById('start-timer-btn').addEventListener('click', handleRestTimerClick);
-    document.getElementById('new-exercise-name').addEventListener('input', handleInputSuggestions);
     document.getElementById('exercise-comment-detail').addEventListener('input', () => saveSeries());
     document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
     document.getElementById('finish-session-btn').addEventListener('click', () => {
-        if(Storage.completeSession(App.currentSessionId)) { 
-            showNotification('Validé !', 'success'); stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); 
-        }
+        if(Storage.completeSession(App.currentSessionId)) { showNotification('Validé !', 'success'); stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); }
     });
 }
 
@@ -148,25 +144,35 @@ function selectExerciseInDetail(id) {
     checkPR();
 }
 
-// === GESTION EXERCICES & SUGGESTIONS ===
+// === GESTION EXERCICES (AJOUT & MODIF) ===
+
+// Remplir la datalist des muscles disponibles
+function populateMusclesDatalist() {
+    const list = document.getElementById('muscles-list');
+    list.innerHTML = '';
+    Storage.getAllMuscleGroups().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        list.appendChild(opt);
+    });
+}
+
 function openExerciseModal() {
     document.getElementById('exercise-modal').classList.add('active');
-    const input = document.getElementById('new-exercise-name');
-    input.value = '';
+    document.getElementById('new-exercise-name').value = '';
     document.getElementById('new-exercise-muscle').value = ''; 
     document.getElementById('suggestions-container').innerHTML = ''; 
-    setTimeout(() => input.focus(), 100);
+    populateMusclesDatalist();
+    setTimeout(() => document.getElementById('new-exercise-name').focus(), 100);
 }
 
 function handleInputSuggestions(e) {
     const val = e.target.value.toLowerCase().trim();
     const container = document.getElementById('suggestions-container');
     container.innerHTML = '';
-    
     if(val.length < 1) { container.classList.add('hidden'); return; }
     
     const all = Storage.getAllExercisesFlat();
-    // Unique list based on name
     const uniqueNames = [...new Set(all.map(e => e.name))].sort();
     const matches = uniqueNames.filter(n => n.toLowerCase().includes(val));
     
@@ -178,29 +184,56 @@ function handleInputSuggestions(e) {
             div.textContent = name;
             div.onclick = () => {
                 document.getElementById('new-exercise-name').value = name;
-                container.innerHTML = ''; 
-                container.classList.add('hidden');
+                container.innerHTML = ''; container.classList.add('hidden');
             };
             container.appendChild(div);
         });
-    } else { 
-        container.classList.add('hidden'); 
-    }
+    } else { container.classList.add('hidden'); }
 }
 
 function saveNewExercise() {
     const name = document.getElementById('new-exercise-name').value.trim();
-    const muscle = document.getElementById('new-exercise-muscle').value; 
+    const muscle = document.getElementById('new-exercise-muscle').value.trim(); 
     if(name) { 
-        const ex = Storage.addExercise(App.currentSeanceId, name, muscle || '');
+        const ex = Storage.addExercise(App.currentSeanceId, name, muscle);
         document.getElementById('exercise-modal').classList.remove('active');
         renderExerciseCarousel(Storage.getSeance(App.currentSeanceId));
         selectExerciseInDetail(ex.id);
+        updateLiveVolume();
         showNotification('Exercice ajouté', 'success');
     }
 }
 
-// === SÉRIES ===
+// Fonction pour éditer
+function openEditExerciseModal() {
+    const ex = Storage.getAllExercisesFlat().find(e => e.id === App.currentExerciseId);
+    if(!ex) return;
+    
+    document.getElementById('edit-exercise-name').value = ex.name;
+    document.getElementById('edit-exercise-muscle').value = ex.muscleGroup || '';
+    
+    populateMusclesDatalist();
+    document.getElementById('edit-exercise-modal').classList.add('active');
+}
+
+function saveEditedExercise() {
+    const newName = document.getElementById('edit-exercise-name').value.trim();
+    const newMuscle = document.getElementById('edit-exercise-muscle').value.trim();
+    
+    if(newName) {
+        Storage.updateExercise(App.currentExerciseId, newName, newMuscle);
+        document.getElementById('edit-exercise-modal').classList.remove('active');
+        
+        // Rafraîchir l'UI
+        const seance = Storage.getSeance(App.currentSeanceId);
+        renderExerciseCarousel(seance);
+        selectExerciseInDetail(App.currentExerciseId);
+        updateLiveVolume();
+        showNotification('Exercice modifié avec succès', 'success');
+    }
+}
+
+// SÉRIES
 function renderSeriesTable(series) {
     const tb = document.getElementById('series-tbody-detail'); tb.innerHTML = '';
     if(series.length===0) series=[{}];
@@ -209,10 +242,7 @@ function renderSeriesTable(series) {
         tr.innerHTML = `<td><input type="checkbox" class="series-select"></td><td>${i+1}</td><td><input type="number" class="reps" value="${s.reps||''}" placeholder="0"></td><td><input type="number" class="kg" value="${s.kg||''}" placeholder="0"></td><td><input type="number" class="repos" value="${(s.repos<10 && s.repos>0)?s.repos*60:(s.repos||'')}" placeholder="s"></td><td><input type="number" class="rir" value="${s.rir||''}" placeholder="-"></td><td><input type="checkbox" class="fait" ${s.fait?'checked':''}></td>`;
         tr.querySelectorAll('input:not(.series-select)').forEach(i => i.onchange = () => { saveSeries(); checkPR(); });
         tr.querySelector('.fait').onchange = (e) => { 
-            if(e.target.checked) { 
-                resetRestTimer(); 
-                startRestTimer(); 
-            }
+            if(e.target.checked) { resetRestTimer(); startRestTimer(); }
             saveSeries(); 
         };
         tb.appendChild(tr);
@@ -230,7 +260,6 @@ function saveSeries() {
     Storage.saveExerciseData(App.currentSessionId, App.currentExerciseId, { comment: document.getElementById('exercise-comment-detail').value, series: s });
     updateLiveVolume();
 }
-
 function updateLiveVolume() {
     const sess = Storage.getSessions().find(s => s.id === App.currentSessionId);
     const s = Storage.getSeance(App.currentSeanceId);
@@ -264,7 +293,6 @@ function updateLiveVolume() {
     });
     cont.innerHTML = html;
 }
-
 function addSeries() { 
     const d = Storage.getExerciseData(App.currentSessionId, App.currentExerciseId);
     const last = (d.series && d.series.length) ? d.series[d.series.length-1] : {};
@@ -290,7 +318,6 @@ function checkPR() {
     document.getElementById('pr-badge').className = isPR ? 'pr-badge' : 'pr-badge hidden';
 }
 
-// === HISTORIQUE DÉTAILLÉ ===
 function loadHistory() {
     const c = document.getElementById('history-timeline'); c.innerHTML='';
     const h = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
@@ -313,9 +340,7 @@ function loadHistory() {
     });
 }
 
-// === TIMERS LOGIC ===
-
-// Timer 1: Repos (Bouton Rouge)
+// TIMERS
 function handleRestTimerClick() {
     if(App.timerState === 'running') pauseRestTimer();
     else if (App.timerState === 'paused') resetRestTimer();
@@ -348,14 +373,10 @@ function updateRestTimerDisplay() {
     document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
 }
 
-// Timer 2: Session (Global)
 function startSessionTimer() {
     const display = document.getElementById('session-total-timer');
     if(!display) return;
-    
-    // Si un chrono est déjà en cours on ne le reset pas à 0
     if(!App.sessionStartTime) App.sessionStartTime = Date.now(); 
-    
     if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
     App.sessionTimerInterval = setInterval(() => {
         const diff = Date.now() - App.sessionStartTime;
@@ -367,38 +388,48 @@ function startSessionTimer() {
 }
 function stopSessionTimer() { 
     if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
-    App.sessionStartTime = null; // Remet à zéro pour la prochaine séance
+    App.sessionStartTime = null; 
     const display = document.getElementById('session-total-timer');
     if(display) display.textContent = "00:00";
 }
 
+// OPTIONS MENU (AJOUT BOUTON MODIFIER)
 function showOptionsMenu() {
     const m = document.createElement('div'); m.className='options-menu active';
-    m.innerHTML = `<div class="options-menu-content"><div style="text-align:center;color:#666;font-size:12px;margin-bottom:10px">DÉPLACER</div><div style="display:flex;gap:10px;margin-bottom:10px"><button id="mv-l" class="option-item">⬅️ Gauche</button><button id="mv-r" class="option-item">Droite ➡️</button></div><button id="del-ex" class="option-item" style="color:#ef4444">Supprimer</button><button id="canc" class="option-item">Annuler</button></div>`;
+    m.innerHTML = `
+        <div class="options-menu-content">
+            <div style="text-align:center;color:#666;font-size:12px;margin-bottom:10px">OPTIONS</div>
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <button id="mv-l" class="option-item">⬅️ Gauche</button>
+                <button id="mv-r" class="option-item">Droite ➡️</button>
+            </div>
+            <button id="edit-ex" class="option-item" style="color:#fff">✏️ Modifier l'exercice</button>
+            <button id="del-ex" class="option-item" style="color:#ef4444">🗑️ Supprimer l'exercice</button>
+            <button id="canc" class="option-item">Annuler</button>
+        </div>`;
     document.body.appendChild(m);
     m.onclick = (e) => {
         const s = Storage.getSeance(App.currentSeanceId); const idx = s.exercises.findIndex(e=>e.id===App.currentExerciseId);
         const exs = [...s.exercises];
         if(e.target.id==='mv-l' && idx>0) { const t=exs[idx]; exs[idx]=exs[idx-1]; exs[idx-1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
         if(e.target.id==='mv-r' && idx<exs.length-1) { const t=exs[idx]; exs[idx]=exs[idx+1]; exs[idx+1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
-        if(e.target.id==='del-ex' && confirm('Supprimer ?')) { Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); openSeanceDetail(App.currentSeanceId); }
-        if(e.target.tagName==='BUTTON' || e.target===m) m.remove();
+        if(e.target.id==='edit-ex') { openEditExerciseModal(); }
+        if(e.target.id==='del-ex' && confirm('Supprimer cet exercice de la séance ?')) { Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); openSeanceDetail(App.currentSeanceId); }
+        if(e.target.tagName==='BUTTON' || e.target===m) { m.classList.remove('active'); setTimeout(()=>m.remove(), 300); }
     };
 }
 
-// === IMPORT/EXPORT ===
 function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Storage.exportData()], {type:'application/json'})); a.download = `sauvegarde_malzou_${new Date().toISOString().split('T')[0]}.json`; a.click(); }
 function importDataFile(e) { const r = new FileReader(); r.onload = (evt) => { if(Storage.importData(evt.target.result)) { showNotification('Succès !', 'success'); setTimeout(()=>location.reload(), 1000); } else showNotification('Erreur fichier', 'error'); }; if(e.target.files[0]) r.readAsText(e.target.files[0]); }
 function showNotification(m, t='info') { const n = document.createElement('div'); n.className=`notification notification-${t}`; n.textContent=m; document.body.appendChild(n); setTimeout(()=>n.classList.add('show'),10); setTimeout(()=>{n.classList.remove('show'); setTimeout(()=>n.remove(),300)}, 3000); }
 
-// === ANALYSE & GRAPHIQUES ===
+// ANALYSE & GRAPHIQUES
 function initHistoriqueView() { document.getElementById('prev-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()-1); renderCalendar();}); document.getElementById('next-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()+1); renderCalendar();}); }
 
 function refreshHistoriqueView() {
     document.getElementById('total-sessions').textContent = Storage.getTotalSessionsCount();
     renderCalendar();
-    
-    updateMuscleVolumeChart(); // Calcul du volume via les template (Option 1)
+    updateMuscleVolumeChart(); 
 
     const sel = document.getElementById('chart-exercise-select'); sel.innerHTML = '<option value="" disabled selected>Choisir...</option>';
     [...new Set(Storage.getAllExercisesFlat().map(e=>e.name))].sort().forEach(n => {
@@ -408,39 +439,27 @@ function refreshHistoriqueView() {
     sel.onchange = (e) => { App.statsState.selectedExerciseId = e.target.value; updateChart(); };
 }
 
-// LOGIQUE OPTION 1 : VOLUME THÉORIQUE DU PROGRAMME ACTUEL
 function updateMuscleVolumeChart() {
     const seances = Storage.getSeances();
     const muscleCounts = {};
 
     seances.forEach(seance => {
         if (!seance.exercises) return;
-        
         seance.exercises.forEach(ex => {
             let muscle = ex.muscleGroup || 'Autre';
-            
-            // 1. Cherche le nb de séries dans le dernier historique de cet exo
             const history = Storage.getGlobalExerciseHistory(ex.id);
             let nbSeries = 0;
             
             if (history && history.length > 0) {
                 history.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const lastData = history[history.length - 1].data;
-                if (lastData && lastData.series) {
-                    nbSeries = lastData.series.length;
-                }
+                if (lastData && lastData.series) nbSeries = lastData.series.length;
             } else {
-                // 2. Si pas d'historique, cherche dans la session brouillon actuelle
                 const sessions = Storage.getSessions();
                 const draft = sessions.slice().reverse().find(s => s.seanceId === seance.id && s.exercises && s.exercises[ex.id]);
-                if (draft && draft.exercises[ex.id].series) {
-                    nbSeries = draft.exercises[ex.id].series.length;
-                }
+                if (draft && draft.exercises[ex.id].series) nbSeries = draft.exercises[ex.id].series.length;
             }
-
-            if (nbSeries > 0) {
-                muscleCounts[muscle] = (muscleCounts[muscle] || 0) + nbSeries;
-            }
+            if (nbSeries > 0) muscleCounts[muscle] = (muscleCounts[muscle] || 0) + nbSeries;
         });
     });
 
@@ -448,23 +467,11 @@ function updateMuscleVolumeChart() {
     cont.innerHTML = '';
     const sorted = Object.entries(muscleCounts).sort((a,b) => b[1] - a[1]);
     
-    if(sorted.length === 0) {
-        cont.innerHTML = '<div style="color:#666; font-size:13px; text-align:center;">Aucun volume paramétré</div>';
-        return;
-    }
-
+    if(sorted.length === 0) { cont.innerHTML = '<div style="color:#666; font-size:13px; text-align:center;">Aucun volume paramétré</div>'; return; }
     const maxSets = sorted[0][1];
     sorted.forEach(([m, c]) => {
         const percent = Math.max(5, (c / maxSets) * 100);
-        cont.innerHTML += `
-            <div class="muscle-row">
-                <div class="muscle-name">${m}</div>
-                <div class="muscle-bar-wrapper">
-                    <div class="muscle-bar-fill" style="width: ${percent}%"></div>
-                </div>
-                <div class="muscle-count">${c}</div>
-            </div>
-        `;
+        cont.innerHTML += `<div class="muscle-row"><div class="muscle-name">${m}</div><div class="muscle-bar-wrapper"><div class="muscle-bar-fill" style="width: ${percent}%"></div></div><div class="muscle-count">${c}</div></div>`;
     });
 }
 
@@ -480,16 +487,11 @@ function updateChart() {
     });
     const max = Math.max(...vals); const min = Math.min(...vals); const range = (max - min) === 0 ? 10 : (max - min);
     let path = "";
-    vals.forEach((v, i) => {
-        const x = 5 + (i/(vals.length-1))*90;
-        const y = 100 - 5 - ((v-min)/range)*90;
-        path += `${x},${y} `;
-    });
+    vals.forEach((v, i) => { const x = 5 + (i/(vals.length-1))*90; const y = 100 - 5 - ((v-min)/range)*90; path += `${x},${y} `; });
     cont.innerHTML = `<svg viewBox="0 0 100 100" class="chart-svg"><polyline fill="none" stroke="#ef4444" stroke-width="2" points="${path}" vector-effect="non-scaling-stroke"/></svg>`;
     document.getElementById('chart-stats-summary').classList.remove('hidden');
     document.getElementById('stat-max-val').textContent = max;
     document.getElementById('stat-last-val').textContent = vals[vals.length-1];
-    
     const prev = vals[0]; const last = vals[vals.length-1];
     let pText = "0%"; let pColor = "#888";
     if (prev === 0) { if (last > 0) { pText = "Nouveau"; pColor = "#22c55e"; } } 
