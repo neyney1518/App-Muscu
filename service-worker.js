@@ -7,7 +7,7 @@ const urlsToCache = [
   '/app.js',
   '/storage.js',
   '/manifest.json',
-  '/icon-192_old.png',
+  '/icon-192-old.png',
   '/icon-512.png'
 ];
 
@@ -28,3 +28,4 @@ self.addEventListener('fetch', event => {
       return caches.open(CACHE_NAME).then(c => { c.put(event.request, r.clone()); return r; });
   })));
 });
+
