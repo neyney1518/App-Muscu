@@ -1,5 +1,5 @@
-// Service Worker - VERSION 13 (Nouveau Design Glassmorphism + Chronos Persistants)
-const CACHE_NAME = 'musculation-v13';
+// Service Worker - VERSION 14 (Design ultra-contrasté + Exercices de rechange)
+const CACHE_NAME = 'musculation-v14';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -13,18 +13,35 @@ const urlsToCache = [
 
 self.addEventListener('install', event => {
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(urlsToCache);
+    })
+  );
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => {
-      if (k !== CACHE_NAME) return caches.delete(k);
-  }))));
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.map(k => {
+        if (k !== CACHE_NAME) {
+          return caches.delete(k);
+        }
+      })
+    ))
+  );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  event.respondWith(caches.match(event.request).then(res => res || fetch(event.request).then(r => {
-      return caches.open(CACHE_NAME).then(c => { c.put(event.request, r.clone()); return r; });
-  })));
+  event.respondWith(
+    caches.match(event.request).then(res => {
+      return res || fetch(event.request).then(r => {
+        return caches.open(CACHE_NAME).then(c => { 
+          c.put(event.request, r.clone()); 
+          return r; 
+        });
+      });
+    })
+  );
 });
