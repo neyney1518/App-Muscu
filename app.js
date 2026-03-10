@@ -2,10 +2,7 @@ const App = {
     currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
     currentCalendarMonth: new Date(),
     
-    // Timer Repos
     timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', 
-    
-    // Timer Session (Global)
     sessionTimerInterval: null, sessionStartTime: null,
 
     statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
@@ -75,7 +72,6 @@ function openSeanceDetail(id) {
     btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
     btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn gradient-btn";
     
-    // Récupération des chronos "invincibles"
     startSessionTimer(); 
     restoreRestTimer();
     updateLiveVolume();
@@ -108,7 +104,7 @@ function initSeanceDetailView() {
     document.getElementById('finish-session-btn').addEventListener('click', () => {
         if(Storage.completeSession(App.currentSessionId)) { 
             showNotification('Validé !', 'success'); 
-            stopSessionTimer(true); // True = Efface le chrono car la séance est finie
+            stopSessionTimer(true);
             resetRestTimer(true);
             switchToView('seances-list-view'); 
         }
@@ -119,6 +115,10 @@ function renderExerciseCarousel(seance) {
     const cont = document.getElementById('exercise-carousel-items'); cont.innerHTML = '';
     seance.exercises.forEach((ex, i) => {
         const item = document.createElement('div'); item.className = 'carousel-item';
+        
+        // NOUVEAU : Application de la classe "Rechange"
+        if(ex.isBackup) item.classList.add('is-backup');
+        
         item.dataset.index = i; item.draggable = true;
         if(ex.id === App.currentExerciseId) item.classList.add('active');
         item.innerHTML = `<div class="carousel-icon"><div class="carousel-icon-img">${MUSCLE_ICONS.default}</div></div><div class="carousel-label">${ex.name}</div>`;
@@ -151,6 +151,15 @@ function selectExerciseInDetail(id) {
     document.getElementById('exercise-detail-content').classList.remove('hidden');
     document.querySelectorAll('.carousel-item').forEach(el => el.classList.toggle('active', el.dataset.index !== undefined && Storage.getSeance(App.currentSeanceId).exercises[el.dataset.index].id === id));
     
+    // NOUVEAU : Affichage du badge de rechange
+    const seance = Storage.getSeance(App.currentSeanceId);
+    const exObj = seance.exercises.find(e => e.id === id);
+    if(exObj && exObj.isBackup) {
+        document.getElementById('backup-badge').classList.remove('hidden');
+    } else {
+        document.getElementById('backup-badge').classList.add('hidden');
+    }
+    
     const d = Storage.getExerciseData(App.currentSessionId, id);
     document.getElementById('exercise-comment-detail').value = d.comment || '';
     renderSeriesTable(d.series || []);
@@ -163,6 +172,7 @@ function openExerciseModal() {
     document.getElementById('exercise-modal').classList.add('active');
     document.getElementById('new-exercise-name').value = '';
     document.getElementById('new-exercise-muscle').value = ''; 
+    document.getElementById('new-exercise-backup').checked = false; // Reset case
     document.getElementById('suggestions-container').innerHTML = ''; 
     document.getElementById('muscle-suggestions-container').innerHTML = '';
     setTimeout(() => document.getElementById('new-exercise-name').focus(), 100);
@@ -220,8 +230,10 @@ function handleMuscleSuggestions(e, containerId) {
 function saveNewExercise() {
     const name = document.getElementById('new-exercise-name').value.trim();
     const muscle = document.getElementById('new-exercise-muscle').value.trim(); 
+    const isBackup = document.getElementById('new-exercise-backup').checked; // Checkbox
+
     if(name) { 
-        const ex = Storage.addExercise(App.currentSeanceId, name, muscle);
+        const ex = Storage.addExercise(App.currentSeanceId, name, muscle, isBackup);
         document.getElementById('exercise-modal').classList.remove('active');
         renderExerciseCarousel(Storage.getSeance(App.currentSeanceId));
         selectExerciseInDetail(ex.id);
@@ -233,8 +245,12 @@ function saveNewExercise() {
 function openEditExerciseModal() {
     const ex = Storage.getAllExercisesFlat().find(e => e.id === App.currentExerciseId);
     if(!ex) return;
+    
+    // Remplissage des données existantes
     document.getElementById('edit-exercise-name').value = ex.name;
     document.getElementById('edit-exercise-muscle').value = ex.muscleGroup || '';
+    document.getElementById('edit-exercise-backup').checked = ex.isBackup || false; 
+    
     document.getElementById('edit-muscle-suggestions-container').innerHTML = '';
     document.getElementById('edit-exercise-modal').classList.add('active');
 }
@@ -242,8 +258,10 @@ function openEditExerciseModal() {
 function saveEditedExercise() {
     const newName = document.getElementById('edit-exercise-name').value.trim();
     const newMuscle = document.getElementById('edit-exercise-muscle').value.trim();
+    const isBackup = document.getElementById('edit-exercise-backup').checked;
+    
     if(newName) {
-        Storage.updateExercise(App.currentExerciseId, newName, newMuscle);
+        Storage.updateExercise(App.currentExerciseId, newName, newMuscle, isBackup);
         document.getElementById('edit-exercise-modal').classList.remove('active');
         const seance = Storage.getSeance(App.currentSeanceId);
         renderExerciseCarousel(seance);
@@ -289,6 +307,10 @@ function updateLiveVolume() {
     if(sess.exercises) {
         Object.keys(sess.exercises).forEach(exId => {
             const exObj = s.exercises.find(e => e.id === exId);
+            
+            // Si l'exercice est tagué "rechange", on ne le compte pas !
+            if(exObj && exObj.isBackup) return;
+
             let muscle = 'Autre';
             if(exObj && exObj.muscleGroup) muscle = exObj.muscleGroup;
             else {
@@ -360,9 +382,7 @@ function loadHistory() {
     });
 }
 
-// === CHRONOS INVINCIBLES (PERSISTANTS) ===
-
-// --- Chrono Repos ---
+// === CHRONOS INVINCIBLES ===
 function restoreRestTimer() {
     const savedState = localStorage.getItem('malzou_rest_state');
     if (savedState === 'running') {
@@ -394,11 +414,8 @@ function startRestTimer() {
     document.getElementById('start-timer-btn').style.borderColor = '';
     App.timerState = 'running';
     App.timerStartTime = Date.now() - App.timerElapsed;
-    
-    // Sauvegarde Invincible
     localStorage.setItem('malzou_rest_state', 'running');
     localStorage.setItem('malzou_rest_start', App.timerStartTime.toString());
-
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; updateRestTimerDisplay(); }, 1000);
 }
@@ -406,11 +423,8 @@ function startRestTimer() {
 function pauseRestTimer() {
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerState = 'paused';
-    
-    // Sauvegarde Invincible
     localStorage.setItem('malzou_rest_state', 'paused');
     localStorage.setItem('malzou_rest_elapsed', App.timerElapsed.toString());
-
     document.getElementById('start-timer-btn').classList.remove('timer-active');
     document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
 }
@@ -418,13 +432,11 @@ function pauseRestTimer() {
 function resetRestTimer(clearStorage = true) {
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerInterval = null; App.timerElapsed = 0; App.timerState = 'stopped';
-    
     if (clearStorage) {
         localStorage.removeItem('malzou_rest_state');
         localStorage.removeItem('malzou_rest_start');
         localStorage.removeItem('malzou_rest_elapsed');
     }
-
     const btn = document.getElementById('start-timer-btn');
     if(btn) {
         btn.classList.remove('timer-active');
@@ -438,21 +450,16 @@ function updateRestTimerDisplay() {
     document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
 }
 
-// --- Chrono Séance Global ---
 function startSessionTimer() {
     const display = document.getElementById('session-total-timer');
     if(!display || !App.currentSessionId) return;
-    
-    // Récupération Invincible
     const savedStart = localStorage.getItem('malzou_session_start_' + App.currentSessionId);
-    
     if (savedStart) {
         App.sessionStartTime = parseInt(savedStart);
     } else {
         App.sessionStartTime = Date.now();
         localStorage.setItem('malzou_session_start_' + App.currentSessionId, App.sessionStartTime.toString());
     }
-    
     if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
     App.sessionTimerInterval = setInterval(() => {
         const diff = Date.now() - App.sessionStartTime;
@@ -468,13 +475,12 @@ function stopSessionTimer(clearStorage = false) {
     App.sessionStartTime = null; 
     const display = document.getElementById('session-total-timer');
     if(display) display.textContent = "00:00";
-    
     if(clearStorage && App.currentSessionId) {
         localStorage.removeItem('malzou_session_start_' + App.currentSessionId);
     }
 }
 
-// === OPTIONS MENU (RÉPARATION CLIC SUPPRESSION) ===
+// === OPTIONS MENU ===
 function showOptionsMenu() {
     const m = document.createElement('div'); m.className='options-menu active';
     m.innerHTML = `
@@ -491,10 +497,7 @@ function showOptionsMenu() {
     document.body.appendChild(m);
     
     m.onclick = (e) => {
-        // Blindage de la zone de clic (Trouve le bouton le plus proche même si on clique sur l'emoji)
         const btn = e.target.closest('button');
-        
-        // Si clic dans le vide (hors de la boite), on ferme
         if (!btn && e.target === m) {
             m.classList.remove('active'); setTimeout(()=>m.remove(), 300);
             return;
@@ -511,8 +514,7 @@ function showOptionsMenu() {
         if(btn.id==='del-ex') {
             if(confirm('Supprimer définitivement cet exercice de la séance ?')) { 
                 Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); 
-                m.remove();
-                openSeanceDetail(App.currentSeanceId); 
+                m.remove(); openSeanceDetail(App.currentSeanceId); 
             }
         }
         if(btn.id==='canc') { m.classList.remove('active'); setTimeout(()=>m.remove(), 300); }
@@ -546,6 +548,10 @@ function updateMuscleVolumeChart() {
     seances.forEach(seance => {
         if (!seance.exercises) return;
         seance.exercises.forEach(ex => {
+            
+            // NOUVEAU : On ignore totalement les exercices "Rechange" pour le calcul du volume !
+            if (ex.isBackup) return; 
+
             let muscle = ex.muscleGroup || 'Autre';
             const history = Storage.getGlobalExerciseHistory(ex.id);
             let nbSeries = 0;
