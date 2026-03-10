@@ -1,8 +1,13 @@
 const App = {
     currentSeanceId: null, currentExerciseId: null, currentSessionId: null,
     currentCalendarMonth: new Date(),
+    
+    // Timer Repos
     timerInterval: null, timerStartTime: null, timerElapsed: 0, timerState: 'stopped', 
+    
+    // Timer Session (Global)
     sessionTimerInterval: null, sessionStartTime: null,
+
     statsState: { selectedExerciseId: null, metric: 'weight' }, dragState: { dragSrcEl: null }
 };
 const MUSCLE_ICONS = { default: `<svg width="36" height="36" viewBox="0 0 24 24" fill="#ef4444"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>` };
@@ -11,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initNavigation(); initSeancesListView(); initSeanceDetailView(); initHistoriqueView(); initPerformanceView(); renderSeancesList();
 });
 
-// NAVIGATION
+// === NAVIGATION ===
 function initNavigation() {
     document.querySelectorAll('.nav-btn-modern').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -29,7 +34,7 @@ function switchToView(id) {
     if (id === 'seances-list-view') renderSeancesList();
 }
 
-// LISTE SÉANCES
+// === LISTE SÉANCES ===
 function initSeancesListView() {
     document.getElementById('add-seance-header-btn').addEventListener('click', openSeanceModal);
     document.getElementById('cancel-seance-btn').addEventListener('click', closeSeanceModal);
@@ -49,7 +54,7 @@ function renderSeancesList() {
         const card = document.createElement('div'); card.className = 'seance-card';
         card.innerHTML = `<div class="seance-content-wrapper"><div class="seance-icon">${MUSCLE_ICONS.default}</div><div class="seance-name">${s.name}</div><div class="seance-exercises-count">${s.exercises.length} exos</div></div><button class="card-delete-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
         card.querySelector('.seance-content-wrapper').addEventListener('click', () => openSeanceDetail(s.id));
-        card.querySelector('.card-delete-btn').addEventListener('click', (e) => { e.stopPropagation(); if(confirm('Supprimer ?')) { Storage.deleteSeance(s.id); renderSeancesList(); }});
+        card.querySelector('.card-delete-btn').addEventListener('click', (e) => { e.stopPropagation(); if(confirm('Supprimer cette séance ?')) { Storage.deleteSeance(s.id); renderSeancesList(); }});
         grid.appendChild(card);
     });
 }
@@ -57,7 +62,7 @@ function openSeanceModal() { document.getElementById('seance-modal').classList.a
 function closeSeanceModal() { document.getElementById('seance-modal').classList.remove('active'); }
 function saveNewSeance() { const n = document.getElementById('new-seance-name').value.trim(); if(n) { Storage.addSeance(n); closeSeanceModal(); renderSeancesList(); } }
 
-// DÉTAIL SÉANCE
+// === DÉTAIL SÉANCE ===
 function openSeanceDetail(id) {
     App.currentSeanceId = id;
     const s = Storage.getSeance(id);
@@ -68,10 +73,11 @@ function openSeanceDetail(id) {
     
     const btn = document.getElementById('finish-session-btn');
     btn.textContent = sess.completed ? "Séance terminée (Mettre à jour)" : "Terminer la séance";
-    btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn";
+    btn.className = sess.completed ? "finish-btn completed-state" : "finish-btn gradient-btn";
     
+    // Récupération des chronos "invincibles"
     startSessionTimer(); 
-    resetRestTimer();
+    restoreRestTimer();
     updateLiveVolume();
 
     if (s.exercises.length > 0) selectExerciseInDetail(s.exercises[0].id);
@@ -80,24 +86,32 @@ function openSeanceDetail(id) {
 }
 
 function initSeanceDetailView() {
-    document.getElementById('back-to-list').addEventListener('click', () => { stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); });
+    document.getElementById('back-to-list').addEventListener('click', () => { stopSessionTimer(false); switchToView('seances-list-view'); });
     
-    // Nouveaux exos
+    // Ajout exos
     document.getElementById('cancel-exercise-btn').addEventListener('click', () => document.getElementById('exercise-modal').classList.remove('active'));
     document.getElementById('save-exercise-btn').addEventListener('click', saveNewExercise);
     document.getElementById('new-exercise-name').addEventListener('input', handleInputSuggestions);
+    document.getElementById('new-exercise-muscle').addEventListener('input', (e) => handleMuscleSuggestions(e, 'muscle-suggestions-container'));
     
     // Edition exos
     document.getElementById('cancel-edit-btn').addEventListener('click', () => document.getElementById('edit-exercise-modal').classList.remove('active'));
     document.getElementById('save-edit-btn').addEventListener('click', saveEditedExercise);
+    document.getElementById('edit-exercise-muscle').addEventListener('input', (e) => handleMuscleSuggestions(e, 'edit-muscle-suggestions-container'));
 
     document.getElementById('add-series-detail-btn').addEventListener('click', addSeries);
     document.querySelector('.btn-delete-series').addEventListener('click', deleteSelectedSeries);
+    
     document.getElementById('start-timer-btn').addEventListener('click', handleRestTimerClick);
     document.getElementById('exercise-comment-detail').addEventListener('input', () => saveSeries());
     document.querySelector('.options-btn').addEventListener('click', showOptionsMenu);
     document.getElementById('finish-session-btn').addEventListener('click', () => {
-        if(Storage.completeSession(App.currentSessionId)) { showNotification('Validé !', 'success'); stopRestTimer(true); stopSessionTimer(); switchToView('seances-list-view'); }
+        if(Storage.completeSession(App.currentSessionId)) { 
+            showNotification('Validé !', 'success'); 
+            stopSessionTimer(true); // True = Efface le chrono car la séance est finie
+            resetRestTimer(true);
+            switchToView('seances-list-view'); 
+        }
     });
 }
 
@@ -145,24 +159,12 @@ function selectExerciseInDetail(id) {
 }
 
 // === GESTION EXERCICES (AJOUT & MODIF) ===
-
-// Remplir la datalist des muscles disponibles
-function populateMusclesDatalist() {
-    const list = document.getElementById('muscles-list');
-    list.innerHTML = '';
-    Storage.getAllMuscleGroups().forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        list.appendChild(opt);
-    });
-}
-
 function openExerciseModal() {
     document.getElementById('exercise-modal').classList.add('active');
     document.getElementById('new-exercise-name').value = '';
     document.getElementById('new-exercise-muscle').value = ''; 
     document.getElementById('suggestions-container').innerHTML = ''; 
-    populateMusclesDatalist();
+    document.getElementById('muscle-suggestions-container').innerHTML = '';
     setTimeout(() => document.getElementById('new-exercise-name').focus(), 100);
 }
 
@@ -191,6 +193,30 @@ function handleInputSuggestions(e) {
     } else { container.classList.add('hidden'); }
 }
 
+function handleMuscleSuggestions(e, containerId) {
+    const val = e.target.value.toLowerCase().trim();
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    if(val.length < 1) { container.classList.add('hidden'); return; }
+    
+    const allMuscles = Storage.getAllMuscleGroups();
+    const matches = allMuscles.filter(n => n.toLowerCase().includes(val));
+    
+    if(matches.length > 0) {
+        container.classList.remove('hidden');
+        matches.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = name;
+            div.onclick = () => {
+                e.target.value = name;
+                container.innerHTML = ''; container.classList.add('hidden');
+            };
+            container.appendChild(div);
+        });
+    } else { container.classList.add('hidden'); }
+}
+
 function saveNewExercise() {
     const name = document.getElementById('new-exercise-name').value.trim();
     const muscle = document.getElementById('new-exercise-muscle').value.trim(); 
@@ -204,27 +230,21 @@ function saveNewExercise() {
     }
 }
 
-// Fonction pour éditer
 function openEditExerciseModal() {
     const ex = Storage.getAllExercisesFlat().find(e => e.id === App.currentExerciseId);
     if(!ex) return;
-    
     document.getElementById('edit-exercise-name').value = ex.name;
     document.getElementById('edit-exercise-muscle').value = ex.muscleGroup || '';
-    
-    populateMusclesDatalist();
+    document.getElementById('edit-muscle-suggestions-container').innerHTML = '';
     document.getElementById('edit-exercise-modal').classList.add('active');
 }
 
 function saveEditedExercise() {
     const newName = document.getElementById('edit-exercise-name').value.trim();
     const newMuscle = document.getElementById('edit-exercise-muscle').value.trim();
-    
     if(newName) {
         Storage.updateExercise(App.currentExerciseId, newName, newMuscle);
         document.getElementById('edit-exercise-modal').classList.remove('active');
-        
-        // Rafraîchir l'UI
         const seance = Storage.getSeance(App.currentSeanceId);
         renderExerciseCarousel(seance);
         selectExerciseInDetail(App.currentExerciseId);
@@ -233,16 +253,16 @@ function saveEditedExercise() {
     }
 }
 
-// SÉRIES
+// === SÉRIES ===
 function renderSeriesTable(series) {
     const tb = document.getElementById('series-tbody-detail'); tb.innerHTML = '';
     if(series.length===0) series=[{}];
     series.forEach((s,i) => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><input type="checkbox" class="series-select"></td><td>${i+1}</td><td><input type="number" class="reps" value="${s.reps||''}" placeholder="0"></td><td><input type="number" class="kg" value="${s.kg||''}" placeholder="0"></td><td><input type="number" class="repos" value="${(s.repos<10 && s.repos>0)?s.repos*60:(s.repos||'')}" placeholder="s"></td><td><input type="number" class="rir" value="${s.rir||''}" placeholder="-"></td><td><input type="checkbox" class="fait" ${s.fait?'checked':''}></td>`;
+        tr.innerHTML = `<td><input type="checkbox" class="series-select"></td><td>${i+1}</td><td><input type="number" class="reps glass-input" value="${s.reps||''}" placeholder="0"></td><td><input type="number" class="kg glass-input" value="${s.kg||''}" placeholder="0"></td><td><input type="number" class="repos glass-input" value="${(s.repos<10 && s.repos>0)?s.repos*60:(s.repos||'')}" placeholder="s"></td><td><input type="number" class="rir glass-input" value="${s.rir||''}" placeholder="-"></td><td><input type="checkbox" class="fait" ${s.fait?'checked':''}></td>`;
         tr.querySelectorAll('input:not(.series-select)').forEach(i => i.onchange = () => { saveSeries(); checkPR(); });
         tr.querySelector('.fait').onchange = (e) => { 
-            if(e.target.checked) { resetRestTimer(); startRestTimer(); }
+            if(e.target.checked) { resetRestTimer(true); startRestTimer(); }
             saveSeries(); 
         };
         tb.appendChild(tr);
@@ -321,7 +341,7 @@ function checkPR() {
 function loadHistory() {
     const c = document.getElementById('history-timeline'); c.innerHTML='';
     const h = Storage.getExerciseHistory(App.currentSeanceId, App.currentExerciseId);
-    if(h.length===0) { c.innerHTML='<p class="empty-history">Pas d\'historique</p>'; return; }
+    if(h.length===0) { c.innerHTML='<p class="empty-history" style="color:#666; font-size:13px; text-align:center;">Pas d\'historique récent</p>'; return; }
     h.forEach(x => {
         const d = document.createElement('div'); d.className='history-date-item';
         let commentHTML = '';
@@ -340,43 +360,99 @@ function loadHistory() {
     });
 }
 
-// TIMERS
+// === CHRONOS INVINCIBLES (PERSISTANTS) ===
+
+// --- Chrono Repos ---
+function restoreRestTimer() {
+    const savedState = localStorage.getItem('malzou_rest_state');
+    if (savedState === 'running') {
+        App.timerStartTime = parseInt(localStorage.getItem('malzou_rest_start') || Date.now());
+        App.timerState = 'running';
+        if(App.timerInterval) clearInterval(App.timerInterval);
+        App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; updateRestTimerDisplay(); }, 1000);
+        document.getElementById('start-timer-btn').classList.add('timer-active');
+        document.getElementById('start-timer-btn').style.borderColor = '';
+    } else if (savedState === 'paused') {
+        App.timerElapsed = parseInt(localStorage.getItem('malzou_rest_elapsed') || 0);
+        App.timerState = 'paused';
+        updateRestTimerDisplay();
+        document.getElementById('start-timer-btn').classList.remove('timer-active');
+        document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
+    } else {
+        resetRestTimer(false); 
+    }
+}
+
 function handleRestTimerClick() {
     if(App.timerState === 'running') pauseRestTimer();
-    else if (App.timerState === 'paused') resetRestTimer();
+    else if (App.timerState === 'paused') resetRestTimer(true);
     else startRestTimer();
 }
+
 function startRestTimer() {
     document.getElementById('start-timer-btn').classList.add('timer-active');
     document.getElementById('start-timer-btn').style.borderColor = '';
     App.timerState = 'running';
     App.timerStartTime = Date.now() - App.timerElapsed;
+    
+    // Sauvegarde Invincible
+    localStorage.setItem('malzou_rest_state', 'running');
+    localStorage.setItem('malzou_rest_start', App.timerStartTime.toString());
+
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerInterval = setInterval(() => { App.timerElapsed = Date.now() - App.timerStartTime; updateRestTimerDisplay(); }, 1000);
 }
+
 function pauseRestTimer() {
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerState = 'paused';
+    
+    // Sauvegarde Invincible
+    localStorage.setItem('malzou_rest_state', 'paused');
+    localStorage.setItem('malzou_rest_elapsed', App.timerElapsed.toString());
+
     document.getElementById('start-timer-btn').classList.remove('timer-active');
     document.getElementById('start-timer-btn').style.borderColor = '#f59e0b';
 }
-function resetRestTimer() {
+
+function resetRestTimer(clearStorage = true) {
     if(App.timerInterval) clearInterval(App.timerInterval);
     App.timerInterval = null; App.timerElapsed = 0; App.timerState = 'stopped';
-    document.getElementById('start-timer-btn').classList.remove('timer-active');
-    document.getElementById('start-timer-btn').style.borderColor = '';
-    document.getElementById('start-timer-btn').innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+    
+    if (clearStorage) {
+        localStorage.removeItem('malzou_rest_state');
+        localStorage.removeItem('malzou_rest_start');
+        localStorage.removeItem('malzou_rest_elapsed');
+    }
+
+    const btn = document.getElementById('start-timer-btn');
+    if(btn) {
+        btn.classList.remove('timer-active');
+        btn.style.borderColor = '';
+        btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+    }
 }
-function stopRestTimer(force = false) { if(force) resetRestTimer(); }
+
 function updateRestTimerDisplay() {
     const m = Math.floor(App.timerElapsed/60000); const s = Math.floor((App.timerElapsed%60000)/1000);
     document.getElementById('start-timer-btn').innerHTML = `<span class="timer-text">${m}:${s.toString().padStart(2,'0')}</span>`;
 }
 
+// --- Chrono Séance Global ---
 function startSessionTimer() {
     const display = document.getElementById('session-total-timer');
-    if(!display) return;
-    if(!App.sessionStartTime) App.sessionStartTime = Date.now(); 
+    if(!display || !App.currentSessionId) return;
+    
+    // Récupération Invincible
+    const savedStart = localStorage.getItem('malzou_session_start_' + App.currentSessionId);
+    
+    if (savedStart) {
+        App.sessionStartTime = parseInt(savedStart);
+    } else {
+        App.sessionStartTime = Date.now();
+        localStorage.setItem('malzou_session_start_' + App.currentSessionId, App.sessionStartTime.toString());
+    }
+    
     if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
     App.sessionTimerInterval = setInterval(() => {
         const diff = Date.now() - App.sessionStartTime;
@@ -386,36 +462,60 @@ function startSessionTimer() {
         display.textContent = (h > 0 ? h + ':' : '') + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
     }, 1000);
 }
-function stopSessionTimer() { 
+
+function stopSessionTimer(clearStorage = false) { 
     if(App.sessionTimerInterval) clearInterval(App.sessionTimerInterval);
     App.sessionStartTime = null; 
     const display = document.getElementById('session-total-timer');
     if(display) display.textContent = "00:00";
+    
+    if(clearStorage && App.currentSessionId) {
+        localStorage.removeItem('malzou_session_start_' + App.currentSessionId);
+    }
 }
 
-// OPTIONS MENU (AJOUT BOUTON MODIFIER)
+// === OPTIONS MENU (RÉPARATION CLIC SUPPRESSION) ===
 function showOptionsMenu() {
     const m = document.createElement('div'); m.className='options-menu active';
     m.innerHTML = `
-        <div class="options-menu-content">
-            <div style="text-align:center;color:#666;font-size:12px;margin-bottom:10px">OPTIONS</div>
-            <div style="display:flex;gap:10px;margin-bottom:10px">
+        <div class="options-menu-content glass-panel">
+            <div style="text-align:center;color:#666;font-size:12px;margin-bottom:16px; font-weight:700;">OPTIONS</div>
+            <div style="display:flex;gap:10px;margin-bottom:12px">
                 <button id="mv-l" class="option-item">⬅️ Gauche</button>
                 <button id="mv-r" class="option-item">Droite ➡️</button>
             </div>
-            <button id="edit-ex" class="option-item" style="color:#fff">✏️ Modifier l'exercice</button>
+            <button id="edit-ex" class="option-item">✏️ Modifier l'exercice</button>
             <button id="del-ex" class="option-item" style="color:#ef4444">🗑️ Supprimer l'exercice</button>
-            <button id="canc" class="option-item">Annuler</button>
+            <button id="canc" class="option-item" style="margin-top:16px; opacity:0.7">Annuler</button>
         </div>`;
     document.body.appendChild(m);
+    
     m.onclick = (e) => {
-        const s = Storage.getSeance(App.currentSeanceId); const idx = s.exercises.findIndex(e=>e.id===App.currentExerciseId);
+        // Blindage de la zone de clic (Trouve le bouton le plus proche même si on clique sur l'emoji)
+        const btn = e.target.closest('button');
+        
+        // Si clic dans le vide (hors de la boite), on ferme
+        if (!btn && e.target === m) {
+            m.classList.remove('active'); setTimeout(()=>m.remove(), 300);
+            return;
+        }
+        if (!btn) return;
+
+        const s = Storage.getSeance(App.currentSeanceId); 
+        const idx = s.exercises.findIndex(ex=>ex.id===App.currentExerciseId);
         const exs = [...s.exercises];
-        if(e.target.id==='mv-l' && idx>0) { const t=exs[idx]; exs[idx]=exs[idx-1]; exs[idx-1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
-        if(e.target.id==='mv-r' && idx<exs.length-1) { const t=exs[idx]; exs[idx]=exs[idx+1]; exs[idx+1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
-        if(e.target.id==='edit-ex') { openEditExerciseModal(); }
-        if(e.target.id==='del-ex' && confirm('Supprimer cet exercice de la séance ?')) { Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); openSeanceDetail(App.currentSeanceId); }
-        if(e.target.tagName==='BUTTON' || e.target===m) { m.classList.remove('active'); setTimeout(()=>m.remove(), 300); }
+        
+        if(btn.id==='mv-l' && idx>0) { const t=exs[idx]; exs[idx]=exs[idx-1]; exs[idx-1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
+        if(btn.id==='mv-r' && idx<exs.length-1) { const t=exs[idx]; exs[idx]=exs[idx+1]; exs[idx+1]=t; Storage.reorderExercises(App.currentSeanceId, exs); renderExerciseCarousel({ ...s, exercises: exs }); }
+        if(btn.id==='edit-ex') { openEditExerciseModal(); m.classList.remove('active'); setTimeout(()=>m.remove(), 300); }
+        if(btn.id==='del-ex') {
+            if(confirm('Supprimer définitivement cet exercice de la séance ?')) { 
+                Storage.deleteExercise(App.currentSeanceId, App.currentExerciseId); 
+                m.remove();
+                openSeanceDetail(App.currentSeanceId); 
+            }
+        }
+        if(btn.id==='canc') { m.classList.remove('active'); setTimeout(()=>m.remove(), 300); }
     };
 }
 
@@ -423,7 +523,7 @@ function exportData() { const a = document.createElement('a'); a.href = URL.crea
 function importDataFile(e) { const r = new FileReader(); r.onload = (evt) => { if(Storage.importData(evt.target.result)) { showNotification('Succès !', 'success'); setTimeout(()=>location.reload(), 1000); } else showNotification('Erreur fichier', 'error'); }; if(e.target.files[0]) r.readAsText(e.target.files[0]); }
 function showNotification(m, t='info') { const n = document.createElement('div'); n.className=`notification notification-${t}`; n.textContent=m; document.body.appendChild(n); setTimeout(()=>n.classList.add('show'),10); setTimeout(()=>{n.classList.remove('show'); setTimeout(()=>n.remove(),300)}, 3000); }
 
-// ANALYSE & GRAPHIQUES
+// === ANALYSE & GRAPHIQUES ===
 function initHistoriqueView() { document.getElementById('prev-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()-1); renderCalendar();}); document.getElementById('next-month').addEventListener('click', ()=>{App.currentCalendarMonth.setMonth(App.currentCalendarMonth.getMonth()+1); renderCalendar();}); }
 
 function refreshHistoriqueView() {
