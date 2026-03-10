@@ -56,7 +56,7 @@ const Storage = {
 
     // --- NOUVEAU : Récupérer tous les groupes musculaires uniques ---
     getAllMuscleGroups() {
-        const defaults = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Quadriceps", "Ischio-jambiers", "Mollets", "Abdos"];
+        const defaults = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Quadriceps", "Ischio-jambiers", "Mollets", "Abdos", "Fessiers", "Avant-bras"];
         const all = this.getAllExercisesFlat();
         const used = all.map(e => e.muscleGroup).filter(m => m && m.trim() !== '' && m !== 'Autre');
         
