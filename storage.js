@@ -14,7 +14,8 @@ const Storage = {
     getSeance(id) { return this.getSeances().find(s => s.id === id); },
     deleteSeance(id) { this.saveSeances(this.getSeances().filter(s => s.id !== id)); },
 
-    addExercise(seanceId, name, muscleGroup = '') {
+    // NOUVEAU : Prise en compte du paramètre isBackup
+    addExercise(seanceId, name, muscleGroup = '', isBackup = false) {
         const seances = this.getSeances();
         const seance = seances.find(s => s.id === seanceId);
         if (!seance) return null;
@@ -27,13 +28,15 @@ const Storage = {
         const finalName = existingExercise ? existingExercise.name : name.trim();
         const finalMuscle = muscleGroup.trim() || (existingExercise ? existingExercise.muscleGroup : 'Autre');
 
-        const newExercise = { id: newId, name: finalName, muscleGroup: finalMuscle };
+        // On intègre le paramètre isBackup à la sauvegarde
+        const newExercise = { id: newId, name: finalName, muscleGroup: finalMuscle, isBackup: isBackup };
         seance.exercises.push(newExercise);
         this.saveSeances(seances);
         return newExercise;
     },
 
-    updateExercise(exerciseId, newName, newMuscleGroup) {
+    // NOUVEAU : Prise en compte du paramètre isBackup lors de la modification
+    updateExercise(exerciseId, newName, newMuscleGroup, isBackup = false) {
         const seances = this.getSeances();
         let updated = false;
         
@@ -43,6 +46,7 @@ const Storage = {
                     if (ex.id === exerciseId) {
                         ex.name = newName.trim();
                         ex.muscleGroup = newMuscleGroup.trim() || 'Autre';
+                        ex.isBackup = isBackup; // Mise à jour du statut "Rechange"
                         updated = true;
                     }
                 });
@@ -61,9 +65,9 @@ const Storage = {
         return [...new Set([...defaults, ...used])].sort();
     },
 
-    deleteExercise(seanceId, exerciseId) {
+    deleteExercise(sId, exerciseId) {
         const s = this.getSeances();
-        const seance = s.find(x => x.id === seanceId);
+        const seance = s.find(x => x.id === sId);
         if (seance) { seance.exercises = seance.exercises.filter(e => e.id !== exerciseId); this.saveSeances(s); }
     },
     reorderExercises(sId, order) {
@@ -116,7 +120,7 @@ const Storage = {
     },
     getTotalSessionsCount() { return this.getSessions().filter(s => s.completed !== false).length; },
     getSessionDates() { return this.getSessions().filter(s => s.completed !== false).map(s => s.date); },
-    exportData() { return JSON.stringify({ seances: this.getSeances(), sessions: this.getSessions(), v: '1.7' }); },
+    exportData() { return JSON.stringify({ seances: this.getSeances(), sessions: this.getSessions(), v: '1.8' }); },
     importData(json) { try { const d = JSON.parse(json); if (d.seances && d.sessions) { this.saveSeances(d.seances); this.saveSessions(d.sessions); return true; } } catch (e) {} return false; },
     checkIsPR(exId, kg) { if (!kg || kg <= 0) return false; const h = this.getGlobalExerciseHistory(exId); if (h.length === 0) return true; let max = 0; h.forEach(x => x.data.series.forEach(s => { if(s.kg > max) max = parseFloat(s.kg); })); return parseFloat(kg) > max; }
 };
