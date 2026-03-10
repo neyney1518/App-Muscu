@@ -1,5 +1,5 @@
-// Service Worker - VERSION 12 (Mise à jour majeure + nouveau logo)
-const CACHE_NAME = 'musculation-v12';
+// Service Worker - VERSION 13 (Nouveau Design Glassmorphism + Chronos Persistants)
+const CACHE_NAME = 'musculation-v13';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -28,5 +28,3 @@ self.addEventListener('fetch', event => {
       return caches.open(CACHE_NAME).then(c => { c.put(event.request, r.clone()); return r; });
   })));
 });
-
-
