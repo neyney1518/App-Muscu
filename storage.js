@@ -33,7 +33,6 @@ const Storage = {
         return newExercise;
     },
 
-    // --- NOUVEAU : Modifier un exercice existant partout ---
     updateExercise(exerciseId, newName, newMuscleGroup) {
         const seances = this.getSeances();
         let updated = false;
@@ -54,19 +53,17 @@ const Storage = {
         return updated;
     },
 
-    // --- NOUVEAU : Récupérer tous les groupes musculaires uniques ---
     getAllMuscleGroups() {
         const defaults = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Quadriceps", "Ischio-jambiers", "Mollets", "Abdos", "Fessiers", "Avant-bras"];
         const all = this.getAllExercisesFlat();
         const used = all.map(e => e.muscleGroup).filter(m => m && m.trim() !== '' && m !== 'Autre');
         
-        // Combine par défaut + personnalisés, retire les doublons et trie
         return [...new Set([...defaults, ...used])].sort();
     },
 
     deleteExercise(seanceId, exerciseId) {
         const s = this.getSeances();
-        const seance = s.find(x => x.id === sId);
+        const seance = s.find(x => x.id === seanceId);
         if (seance) { seance.exercises = seance.exercises.filter(e => e.id !== exerciseId); this.saveSeances(s); }
     },
     reorderExercises(sId, order) {
@@ -119,7 +116,7 @@ const Storage = {
     },
     getTotalSessionsCount() { return this.getSessions().filter(s => s.completed !== false).length; },
     getSessionDates() { return this.getSessions().filter(s => s.completed !== false).map(s => s.date); },
-    exportData() { return JSON.stringify({ seances: this.getSeances(), sessions: this.getSessions(), v: '1.6' }); },
+    exportData() { return JSON.stringify({ seances: this.getSeances(), sessions: this.getSessions(), v: '1.7' }); },
     importData(json) { try { const d = JSON.parse(json); if (d.seances && d.sessions) { this.saveSeances(d.seances); this.saveSessions(d.sessions); return true; } } catch (e) {} return false; },
     checkIsPR(exId, kg) { if (!kg || kg <= 0) return false; const h = this.getGlobalExerciseHistory(exId); if (h.length === 0) return true; let max = 0; h.forEach(x => x.data.series.forEach(s => { if(s.kg > max) max = parseFloat(s.kg); })); return parseFloat(kg) > max; }
 };
