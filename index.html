@@ -14,8 +14,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
-    <link rel="icon" type="image/png" href="icon-192_old.png">
-    <link rel="apple-touch-icon" href="icon-192_old.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
     
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -24,7 +24,7 @@
     <div id="seances-list-view" class="view active">
         <header class="main-header glass-header">
             <div class="header-title-group">
-                <img src="icon-192_old.png" alt="Logo" class="header-logo">
+                <img src="icon-192.png" alt="Logo" class="header-logo">
                 <h1 class="main-title">Malzou-training</h1>
             </div>
             <div class="header-actions">
@@ -60,6 +60,8 @@
         </div>
         
         <div id="exercise-detail-content" class="exercise-detail">
+            <div id="backup-badge" class="backup-badge hidden">🔄 EXERCICE DE RECHANGE</div>
+            
             <div class="comment-section">
                 <label class="section-label-inline">COMMENTAIRE</label>
                 <textarea id="exercise-comment-detail" class="comment-textarea glass-input" placeholder="Notes sur l'exercice..."></textarea>
@@ -99,7 +101,7 @@
             
             <div class="dashboard-card glass-panel">
                 <h3 class="card-title">Volume Musculaire</h3>
-                <p class="card-subtitle">Volume paramétré dans vos séances</p>
+                <p class="card-subtitle">Volume paramétré (hors variantes)</p>
                 <div id="muscle-volume-container"></div>
             </div>
 
@@ -157,6 +159,11 @@
                 <div id="muscle-suggestions-container" class="suggestions-dropdown hidden"></div>
             </div>
 
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="new-exercise-backup" class="custom-checkbox">
+                <label for="new-exercise-backup">Exercice de rechange</label>
+            </div>
+
             <div class="modal-actions-modern">
                 <button id="cancel-exercise-btn" class="btn-modal-secondary glass-btn">Annuler</button>
                 <button id="save-exercise-btn" class="btn-modal-primary gradient-btn">Créer</button>
@@ -174,6 +181,11 @@
                 <div id="edit-muscle-suggestions-container" class="suggestions-dropdown hidden"></div>
             </div>
             
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="edit-exercise-backup" class="custom-checkbox">
+                <label for="edit-exercise-backup">Exercice de rechange</label>
+            </div>
+
             <div class="modal-actions-modern">
                 <button id="cancel-edit-btn" class="btn-modal-secondary glass-btn">Annuler</button>
                 <button id="save-edit-btn" class="btn-modal-primary gradient-btn">Enregistrer</button>
@@ -197,4 +209,3 @@
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 </html>
-
